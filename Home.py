@@ -20,7 +20,7 @@ def main():
     )
     state.initialize_state()
 
-    st.title("Money Tracker 💸")
+    st.title("centzz 💸")
 
     st.header("Accounts")
     # Create a placeholder for the account overview
