@@ -3,6 +3,7 @@ import streamlit as st
 import io_utils
 import state
 
+
 def main():
     app_config = io_utils.load_app_config()
 
@@ -12,7 +13,8 @@ def main():
     )
 
     state.initialize_state()
-    st.header('Graphs 📈')
+    st.header("Graphs 📈")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
