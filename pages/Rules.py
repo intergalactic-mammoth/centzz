@@ -8,9 +8,6 @@ import state
 from Rule import Rule, RuleType, RuleRelation, RuleAction, RuleCondition
 from Transaction import Transaction
 
-# TODO: WHen rule is deleted, Delete rule UI doesn't auto update.
-# TODO: WHen rule is deleted, Transactions UI doesn't auto update.
-
 
 def rule_options(header: str):
     df = pd.DataFrame(st.session_state.transactions.values())
@@ -18,6 +15,10 @@ def rule_options(header: str):
 
 
 def add_rule():
+    if not st.session_state.transactions:
+        st.write("No transactions yet... Please add transactions first.")
+        return
+
     # TODO: This only makes sense if I can add multiple conditions.
     # rule_type = st.selectbox("Rule type", [rule.value for rule in RuleType])
 
@@ -58,7 +59,7 @@ def add_rule():
         category = right.selectbox("Account", options=st.session_state.accounts.keys())
 
     st.markdown(
-        f"**Rule:** `IF` :blue[*{target}*] `{relation}` :blue[*{rule_value}*] `THEN` :blue[*{action}*] `=` :blue[*{category}*]."
+        f"**Rule:** `IF` *{target}* `{relation}` *{rule_value}* `THEN` *{action}* `=` *{category}*."
     )
 
     if st.button("Add rule"):
@@ -74,29 +75,28 @@ def add_rule():
             io_utils.write_rules()
             processing.apply_all_rules_to_all_transactions()
             io_utils.write_transactions()
+            # To update the UI
+            st.experimental_rerun()
 
 
 def delete_rule():
-    rules_pretty = {}
     for rule_hash, rule_dict in st.session_state.rules.items():
         conditions_pretty = f", {rule_dict['type']} ".join(
             [
-                f"{condition['field']} {condition['relation']} {condition['values']}"
+                f"*{condition['field']}* `{condition['relation']}` *{condition['values']}*"
                 for condition in rule_dict["conditions"]
             ]
         )
-        rules_pretty[
-            f"IF {conditions_pretty} THEN {rule_dict['action']} = {rule_dict['category']}"
-        ] = rule_hash
-    rule_to_delete = st.selectbox("Rule to delete", rules_pretty.keys())
-    if st.button("Delete rule"):
-        del st.session_state.rules[rules_pretty[rule_to_delete]]
-        st.success(f"Rule deleted: {rule_to_delete}")
-        io_utils.write_rules()
-        processing.apply_all_rules_to_all_transactions()
-        io_utils.write_transactions()
-        # To update the UI
-        st.experimental_rerun()
+        col1, col2 = st.columns([3, 1])
+        rule_pretty = f"**Rule:** `IF` {conditions_pretty} `THEN` *{rule_dict['action']}* `=` *{rule_dict['category']}*."
+        col1.markdown(rule_pretty)
+        if col2.button("❌", key=rule_hash):
+            del st.session_state.rules[rule_hash]
+            io_utils.write_rules()
+            processing.apply_all_rules_to_all_transactions()
+            io_utils.write_transactions()
+            # To update the UI
+            st.experimental_rerun()
 
 
 def main():

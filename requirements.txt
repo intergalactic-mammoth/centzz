@@ -2,5 +2,5 @@ altair==5.0.1
 matplotlib==3.7.1
 pandas==1.5.3
 seaborn==0.11.2
-streamlit==1.24.1
+streamlit==1.25.0
 schwifty==2023.6.0

@@ -11,8 +11,6 @@ class Currency(enum.Enum):
     USD = "USD"
 
 
-# TODO: Needs to have also a starting balance.
-# TODO: FUNCTIONS MUST NOT MESS WITH THE FUCKING STATE OF THE PROGRAM.
 class Account:
     def __init__(
         self,
