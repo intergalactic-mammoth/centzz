@@ -23,13 +23,12 @@ def main():
 
     if not st.session_state.accounts:
         st.write("No accounts yet...")
-        return
-
-    st.dataframe(
-        st.session_state.accounts.values(),
-        hide_index=True,
-        column_config=render.get_accounts_column_config(),
-    )
+    else:
+        st.dataframe(
+            st.session_state.accounts.values(),
+            hide_index=True,
+            column_config=render.get_accounts_column_config(),
+        )
 
     with st.expander("Add new account"):
         account_input = {
