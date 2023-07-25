@@ -1,4 +1,5 @@
 import json
+import os
 
 import streamlit as st
 
@@ -24,6 +25,7 @@ def try_load_json_to_list(filename: str) -> list:
 
 
 def write_json_to_file(filename: str, data: dict):
+    os.makedirs(os.path.dirname(filename), exist_ok=True)
     with open(filename, "w") as f:
         json.dump(data, f)
 
@@ -38,3 +40,15 @@ def write_data():
     write_json_to_file("_data/accounts.json", st.session_state.accounts)
     write_json_to_file("_data/transactions.json", st.session_state.transactions)
     write_json_to_file("_data/rules.json", st.session_state.rules)
+
+
+def write_rules():
+    write_json_to_file("_data/rules.json", st.session_state.rules)
+
+
+def write_accounts():
+    write_json_to_file("_data/accounts.json", st.session_state.accounts)
+
+
+def write_transactions():
+    write_json_to_file("_data/transactions.json", st.session_state.transactions)

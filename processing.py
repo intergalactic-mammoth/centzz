@@ -1,56 +1,63 @@
+import logging
+
 import streamlit as st
 import pandas as pd
 
+from Transaction import Transaction
+from Account import Account
 
-def create_transaction_from_row(row, account_name):
-    return {
-        "id": row["Transaction no."],
-        "date": row["Trade date"],
-        "beneficiary": row["Description1"],
-        "description": f'{row["Description2"]} :: {row["Description3"]}',
-        "amount": row["Debit"] if row["Debit"] else row["Credit"],
-        "currency": st.session_state.accounts[account_name]["currency"],
-        "account": account_name,
-        "category": "",
-        "tags": [],
-        "notes": "",
-    }
+
+def create_transaction_from_row(row, account: Account, headers: dict):
+    return Transaction(
+        transaction_id=row[headers["transaction_id"]],
+        date=pd.to_datetime(row[headers["date"]]).isoformat(),
+        payee=row[headers["payee"]],
+        description=", ".join(
+            [
+                row[header]
+                for header in headers["description"]
+                if row[header] and not pd.isna(row[header])
+            ]
+        )
+        if headers["description"]
+        else "",
+        debit=row[headers["debit"]] if not pd.isna(row[headers["debit"]]) else 0.0,
+        credit=row[headers["credit"]] if not pd.isna(row[headers["credit"]]) else 0.0,
+        account=account.name,
+        currency=account.currency,
+    )
+
+
+def handle_if_transfer(transaction: Transaction):
+    for account in st.session_state.accounts.values():
+        transaction_description = transaction.description.lower().strip(" ")
+        if (account["iban"].lower().strip(" ") in transaction_description) or (
+            account["account_number"].lower().strip(" ") in transaction_description
+        ):
+            logging.info(f"Found transfer to {account['name']}")
+            transaction.transfer_to = account["name"]
+            transaction.transfer_from = transaction.account
+    return transaction
 
 
 def apply_all_rules_to_all_transactions():
     for transaction_id, transaction in st.session_state.transactions.items():
-        st.session_state.transactions[transaction_id] = apply_rules_to_transaction(
-            transaction
-        )
+        transaction = Transaction.from_dict(transaction)
+        transaction.categorize(st.session_state.rules.values())
+        st.session_state.transactions[transaction_id] = transaction.as_dict()
 
 
-def apply_rules_to_transaction(transaction):
-    for rule in st.session_state.rules.values():
-        keywords = [
-            contains.strip() for contains in rule["contains"].lower().split(",")
-        ]
-        if rule["field"] == "beneficiary" and any(
-            keyword in transaction["beneficiary"].lower() for keyword in keywords
-        ):
-            transaction["category"] = rule["category"]
-        elif rule["field"] == "description" and any(
-            keyword in transaction["description"].lower() for keyword in keywords
-        ):
-            transaction["category"] = rule["category"]
-        else:
-            transaction["category"] = "Other"
-    return transaction
-
-
-def process_transactions(df, account_name):
+def process_transactions(df: pd.DataFrame, account: Account, headers: dict):
     duplicate_transactions = 0
     for _, row in df.iterrows():
-        transaction_id = row["Transaction no."]
-        transaction = create_transaction_from_row(row, account_name)
-        transaction = apply_rules_to_transaction(transaction)
-        if st.session_state.transactions.get(transaction_id):
+        transaction = create_transaction_from_row(row, account, headers)
+        transaction = handle_if_transfer(transaction)
+        transaction.categorize(st.session_state.rules.values())
+        if st.session_state.transactions.get(transaction.transaction_id):
             duplicate_transactions += 1
-        st.session_state.transactions[transaction_id] = transaction
+        st.session_state.transactions[
+            transaction.transaction_id
+        ] = transaction.as_dict()
     st.success(f"{len(df)} transactions added.")
     if duplicate_transactions:
         st.warning(f"{duplicate_transactions} duplicate transactions overwritten.")

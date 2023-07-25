@@ -13,7 +13,7 @@ def main():
     )
 
     state.initialize_state()
-    st.header("Graphs 📈")
+    st.header("📈 Graphs")
 
 
 if __name__ == "__main__":
