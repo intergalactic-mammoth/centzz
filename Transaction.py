@@ -57,7 +57,7 @@ class Transaction:
         values = condition["values"]
 
         if relation == RuleRelation.CONTAINS.value:
-            return any([value in getattr(self, field) for value in values])
+            return any(value in getattr(self, field) for value in values)
         elif relation == RuleRelation.EQUALS.value:
             assert len(values) == 1
             return getattr(self, field) == values[0]
@@ -67,10 +67,9 @@ class Transaction:
             raise ValueError(f"Unknown relation {relation}")
 
     def _apply_rule(self, rule: dict) -> bool:
-        for condition in rule["conditions"]:
-            if not self._check_condition(condition):
-                return False
-        return True
+        return all(
+            self._check_condition(condition) for condition in rule["conditions"]
+        )
 
     def categorize(self, rules: list[dict]) -> None:
         matched = False
