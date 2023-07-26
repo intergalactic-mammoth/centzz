@@ -27,26 +27,24 @@ def add_rule():
 
     left, middle, right = st.columns([1, 1, 2])
     target = left.selectbox(
-        "Target",
-        [column for column in Transaction.data_model().keys()],
-        key=f"target_",
+        "Target", list(Transaction.data_model().keys()), key="target_"
     )
     relation = middle.selectbox(
         "Relation",
         [relation.value for relation in RuleRelation],
-        key=f"relation_",
+        key="relation_",
     )
     if relation == RuleRelation.EQUALS.value:
         rule_value = right.selectbox(
-            "Value", key=f"value_", options=rule_options(target)
+            "Value", key="value_", options=rule_options(target)
         )
         rule_value = [rule_value]
     elif relation == RuleRelation.CONTAINS.value:
-        rule_value = right.text_input("Value", key=f"value_")
+        rule_value = right.text_input("Value", key="value_")
         rule_value = [rule_value]
     elif relation == RuleRelation.ONE_OF.value:
         rule_value = right.multiselect(
-            "Values", key=f"value_", options=rule_options(target)
+            "Values", key="value_", options=rule_options(target)
         )
     else:
         st.write("RuleRelation not implemented.")
@@ -63,8 +61,7 @@ def add_rule():
     )
 
     if st.button("Add rule"):
-        conditions = []
-        conditions.append(RuleCondition(target, relation, rule_value))
+        conditions = [RuleCondition(target, relation, rule_value)]
         rule = Rule(conditions, action, category)
         if st.session_state.rules.get(str(hash(rule))):
             st.error(f"Rule already exists: {rule}")

@@ -31,13 +31,13 @@ class Account:
         self.account_number = account_number
 
     def already_exists(self, accounts: dict) -> bool:
-        for existing_account in accounts.values():
-            if (
+        return any(
+            (
                 self.name == existing_account["name"]
                 or self.iban == existing_account["iban"]
-            ):
-                return True
-        return False
+            )
+            for existing_account in accounts.values()
+        )
 
     def is_valid(self) -> bool:
         return self.name and self.iban

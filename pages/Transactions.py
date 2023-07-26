@@ -27,9 +27,9 @@ def main():
         return
 
     with st.expander("Add transactions from CSV"):
-        csv_file = st.file_uploader("Choose a CSV file", type="csv", key="current_file")
-
-        if csv_file:
+        if csv_file := st.file_uploader(
+            "Choose a CSV file", type="csv", key="current_file"
+        ):
             # Parse headers of CSV file to map them to transaction columns
             st.write("Choose the correct column for each transaction field:")
             df = pd.read_csv(csv_file)
@@ -76,11 +76,9 @@ def main():
                         headers,
                     )
                     account.balance = sum(
-                        [
-                            transaction["credit"] - transaction["debit"]
-                            for transaction in st.session_state.transactions.values()
-                            if transaction["account"] == account.name
-                        ]
+                        transaction["credit"] - transaction["debit"]
+                        for transaction in st.session_state.transactions.values()
+                        if transaction["account"] == account.name
                     )
                     st.session_state.accounts[account.name] = account.as_dict()
                     io_utils.write_data()
