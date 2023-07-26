@@ -1,44 +1,27 @@
-from typing import Union
+import attr
 
 from Account import Account, Currency
 from Rule import RuleRelation
 
 
+@attr.s(auto_attribs=True)
 class Transaction:
-    def __init__(
-        self,
-        transaction_id: Union[int, str],
-        date: str,
-        payee: str,
-        description: str,
-        debit: float,
-        credit: float,
-        account: str,
-        currency: Currency,
-        category: str = "Other",
-        transfer_to: str = "",
-        transfer_from: str = "",
-    ):
-        """
-        Will always take the absolute value for debit and credit.
-        """
-        self.transaction_id = transaction_id
-        self.date = date
-        self.payee = payee
-        self.description = description
-        self.debit = abs(debit) if debit else 0.0
-        self.credit = abs(credit) if credit else 0.0
-        self.account = account
-
-        self.currency = currency.value
-        self.category = category
-        self.transfer_to = transfer_to
-        self.transfer_from = transfer_from
+    transaction_id: str
+    date: str
+    payee: str
+    description: str
+    debit: float
+    credit: float
+    account: str
+    currency: Currency
+    category: str = "Other"
+    transfer_to: str = ""
+    transfer_from: str = ""
 
     @staticmethod
     def data_model():
         return {
-            "transaction_id": Union[int, str],
+            "transaction_id": str,
             "date": str,
             "payee": str,
             "description": str,
@@ -82,7 +65,7 @@ class Transaction:
         if not matched:
             self.category = "Other"
 
-    def as_dict(self):
+    def as_dict(self) -> dict:
         return {
             "transaction_id": self.transaction_id,
             "date": self.date,
@@ -97,9 +80,9 @@ class Transaction:
             "transfer_from": self.transfer_from,
         }
 
-    @staticmethod
-    def from_dict(transaction_dict: dict):
-        return Transaction(
+    @classmethod
+    def from_dict(cls, transaction_dict: dict) -> "Transaction":
+        return cls(
             transaction_id=transaction_dict["transaction_id"],
             date=transaction_dict["date"],
             payee=transaction_dict["payee"],

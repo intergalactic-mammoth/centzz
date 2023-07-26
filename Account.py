@@ -1,41 +1,26 @@
-import json
+import attr
 import enum
 
-import streamlit as st
-import pandas as pd
 
-
-class Currency(enum.Enum):
+class Currency(enum.StrEnum):
     CHF = "CHF"
     EUR = "EUR"
     USD = "USD"
 
 
+@attr.s(auto_attribs=True)
 class Account:
-    def __init__(
-        self,
-        name: str,
-        iban: str,
-        currency: Currency,
-        starting_balance: float = 0.0,
-        balance: float = 0.0,
-        bank: str = "",
-        account_number: str = "",
-    ):
-        self.name = name
-        self.iban = iban
-        self.currency = currency
-        self.starting_balance = starting_balance
-        self.balance = balance
-        self.bank = bank
-        self.account_number = account_number
+    name: str
+    iban: str
+    currency: Currency
+    starting_balance: float = 0.0
+    balance: float = 0.0
+    bank: str = ""
+    account_number: str = ""
 
-    def already_exists(self, accounts: dict) -> bool:
+    def already_exists(self, accounts: dict["Account"]) -> bool:
         return any(
-            (
-                self.name == existing_account["name"]
-                or self.iban == existing_account["iban"]
-            )
+            (self.name == existing_account.name or self.iban == existing_account.iban)
             for existing_account in accounts.values()
         )
 
@@ -48,17 +33,17 @@ class Account:
             "bank": self.bank,
             "account_number": self.account_number,
             "iban": self.iban,
-            "currency": self.currency.value,
+            "currency": self.currency,
             "starting_balance": self.starting_balance,
             "balance": self.balance,
         }
 
-    @staticmethod
-    def from_dict(account_dict: dict) -> "Account":
-        return Account(
+    @classmethod
+    def from_dict(cls, account_dict: dict) -> "Account":
+        return cls(
             name=account_dict["name"],
             iban=account_dict["iban"],
-            currency=Currency(account_dict["currency"]),
+            currency=Currency[account_dict["currency"]],
             starting_balance=account_dict["starting_balance"],
             balance=account_dict["balance"],
             bank=account_dict["bank"],

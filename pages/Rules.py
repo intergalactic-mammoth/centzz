@@ -5,7 +5,7 @@ import processing
 import io_utils
 import state
 
-from Rule import Rule, RuleType, RuleRelation, RuleAction, RuleCondition
+from Rule import Rule, RuleOperator, RuleRelation, RuleAction, RuleCondition
 from Transaction import Transaction
 
 

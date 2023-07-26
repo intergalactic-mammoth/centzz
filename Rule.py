@@ -1,78 +1,37 @@
 import enum
+import attr
 
 
-class RuleType(enum.Enum):
+class RuleOperator(enum.StrEnum):
     ANY = "any"
     ALL = "all"
 
 
-class RuleRelation(enum.Enum):
+class RuleRelation(enum.StrEnum):
     CONTAINS = "contains"
     EQUALS = "is"
     ONE_OF = "one of"
 
 
-class RuleAction(enum.Enum):
+class RuleAction(enum.StrEnum):
     TRANSFER_TO = "transfer to"
     TRANSFER_FROM = "transfer from"
     CATEGORIZE = "categorize"
 
 
+@attr.s(auto_attribs=True)
 class RuleCondition:
-    def __init__(self, field: str, relation: RuleRelation, values: list):
-        self.field = field
-        self.relation = relation
-        self.values = values
-
-    def __repr__(self):
-        return f"RuleCondition: {self.field} - {self.relation} - {self.values}"
-
-    def __str__(self):
-        return f"RuleCondition: {self.field} - {self.relation} - {self.values}"
-
-    def __hash__(self):
-        return hash((self.field, self.relation, tuple(self.values)))
-
-    def __eq__(self, other):
-        if not isinstance(other, RuleCondition):
-            return NotImplemented
-        return (self.field, self.relation, self.values) == (
-            other.field,
-            other.relation,
-            other.values,
-        )
+    field: str
+    relation: RuleRelation
+    values: list
 
 
+@attr.s(auto_attribs=True)
 class Rule:
-    def __init__(
-        self,
-        conditions: list[RuleCondition],
-        action: RuleAction,
-        category: str,
-        type: RuleType = RuleType.ALL,
-    ):
-        self.conditions = conditions
-        self.action = action
-        self.category = category
-        self.type = type
-
-    def __repr__(self):
-        return f"Rule: {self.conditions} --> {self.action} = {self.category}"
-
-    def __str__(self):
-        return f"Rule: {self.conditions} --> {self.action} = {self.category}"
-
-    def __hash__(self):
-        return hash((tuple(self.conditions), self.action, self.category))
-
-    def __eq__(self, other):
-        if not isinstance(other, Rule):
-            return NotImplemented
-        return (self.conditions, self.action, self.category) == (
-            other.conditions,
-            other.action,
-            other.category,
-        )
+    conditions: list[RuleCondition]
+    action: RuleAction
+    category: str
+    type: RuleOperator = RuleOperator.ALL
 
     def as_dict(self) -> dict:
         return {
@@ -89,18 +48,18 @@ class Rule:
             "type": self.type.value,
         }
 
-    @staticmethod
-    def from_dict(rule_dict: dict) -> "Rule":
-        return Rule(
+    @classmethod
+    def from_dict(cls, rule_dict: dict) -> "Rule":
+        return cls(
             conditions=[
                 RuleCondition(
-                    field=condition["field"],
-                    relation=condition["relation"],
-                    values=condition["values"],
+                    field=rule_dict["conditions"][i]["field"],
+                    relation=RuleRelation[rule_dict["conditions"][i]["relation"]],
+                    values=rule_dict["conditions"][i]["values"],
                 )
-                for condition in rule_dict["conditions"]
+                for i in range(len(rule_dict["conditions"]))
             ],
-            action=rule_dict["action"],
+            action=RuleAction[rule_dict["action"]],
             category=rule_dict["category"],
-            type=RuleType(rule_dict["type"]),
+            type=RuleOperator[rule_dict["type"]],
         )
