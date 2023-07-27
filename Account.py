@@ -31,27 +31,41 @@ class Account:
 
     def add_transaction(
         self, transaction: Transaction, overwrite_if_exists: bool = False
-    ) -> None:
-        if transaction.transaction_id in self.transactions and not overwrite_if_exists:
-            raise ValueError("Transaction already exists")
+    ) -> bool:
+        """
+        Adds a new transaction. Returns True if the transaction already existed.
+        """
+        transaction_exists = transaction.transaction_id in self.transactions
+        if not overwrite_if_exists and transaction_exists:
+            return transaction_exists
         self.transactions[transaction.transaction_id] = transaction
-        # self.logger.debug(f"Added transaction {transaction.transaction_id}")
+        return transaction_exists
 
     def delete_transaction(self, transaction_id: str) -> None:
         del self.transactions[transaction_id]
-        # self.logger.debug(f"Deleted transaction {transaction_id}")
 
     def add_transactions(
         self, transactions: list[Transaction], overwrite_if_exists: bool = False
-    ) -> None:
+    ) -> int:
+        """
+        Adds transactions to account. Returns the number of duplicate transactions.
+        """
+        num_duplicate_transactions = 0
         for transaction in transactions:
-            self.add_transaction(transaction, overwrite_if_exists)
-        self.logger.debug(f"Added {len(transactions)} transactions")
+            if self.add_transaction(transaction, overwrite_if_exists):
+                num_duplicate_transactions += 1
+        self.logger.info(
+            "Added %s transactions. %s duplicates were %s overwritten.",
+            len(transactions),
+            num_duplicate_transactions,
+            "" if overwrite_if_exists else "not",
+        )
+        return num_duplicate_transactions
 
     def delete_transactions(self, transaction_ids: list[str]) -> None:
         for transaction_id in transaction_ids:
             self.delete_transaction(transaction_id)
-        self.logger.debug(f"Deleted {len(transaction_ids)} transactions")
+        self.logger.info(f"Deleted {len(transaction_ids)} transactions")
 
     def as_dict(self) -> dict:
         return {

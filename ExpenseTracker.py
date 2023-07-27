@@ -30,6 +30,14 @@ class ExpenseTracker:
             for account in self.accounts.values()
         )
 
+    @property
+    def transactions(self) -> list[Transaction]:
+        return [
+            transaction
+            for account in self.accounts.values()
+            for transaction in account.transactions.values()
+        ]
+
     def add_account(self, account: Account) -> None:
         if account.already_exists(self.accounts):
             raise ValueError("Account already exists")
@@ -52,19 +60,29 @@ class ExpenseTracker:
         self.rules.remove(rule)
         self.logger.debug(f"Deleted rule {rule}")
 
-    def get_transactions(self, account_name: str = None) -> list[Transaction]:
+    def get_transactions_for_account(self, account_name: str) -> list[Transaction]:
         if account_name and not self.accounts.get(account_name):
             raise ValueError(f"Account {account_name} does not exist")
-        if not account_name:
-            return [
-                transaction
-                for account in self.accounts.values()
-                for transaction in account.transactions.values()
-            ]
         return list(self.accounts[account_name].transactions.values())
 
+    def get_entries_for_transaction_field(self, field: str) -> list:
+        """For the given transaction field, return all distinct values in the ExpenseTracker's transactions.
+
+        For example, if field is "payee", return all distinct payees in the ExpenseTracker's transactions.
+        """
+        if field == "account":
+            return list(self.accounts.keys())
+        if field == "currency":
+            return list(Currency)
+
+        if field not in Transaction.data_model():
+            raise ValueError(f"Field {field} does not exist")
+        return list(
+            set(getattr(transaction, field) for transaction in self.transactions)
+        )
+
     def categorize_transactions(self) -> None:
-        for transaction in self.get_transactions():
+        for transaction in self.transactions:
             transaction.categorize(self.rules)
 
     def as_dict(self) -> dict:

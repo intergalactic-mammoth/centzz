@@ -1,14 +1,13 @@
 import logging
 import traceback
 import uuid
+import time
 
 import pandas as pd
 import streamlit as st
 
 import io_utils
 import plotting
-import render
-import state
 
 from Account import Account
 from Currency import Currency
@@ -19,167 +18,89 @@ from Rule import Rule, RuleRelation, RuleAction, RuleCondition
 BASE_LOGGER = logging.getLogger(__name__)
 
 
-def rule_options(header: str, transactions: list[Transaction]):
-    df = pd.DataFrame([transaction.as_dict() for transaction in transactions])
-    return df[header].unique()
+class ExpenseTrackerApp:
+    def __init__(self, config_path: str, data_path: str):
+        self.logger = logging.getLogger(__name__)
 
-
-def add_rule(expense_tracker: ExpenseTracker):
-    transactions = expense_tracker.get_transactions()
-    if not transactions:
-        st.write("No transactions yet... Please add transactions first.")
-        return
-
-    # TODO: This only makes sense if I can add multiple conditions.
-    # rule_type = st.selectbox("Rule type", [rule.value for rule in RuleType])
-
-    if "rule_rows" not in st.session_state:
-        st.session_state["rule_rows"] = 0
-
-    left, middle, right = st.columns([1, 1, 2])
-    target = left.selectbox(
-        "Target", list(Transaction.data_model().keys()), key="target_"
-    )
-    relation = middle.selectbox("Relation", list(RuleRelation), key="relation_")
-    if relation == RuleRelation.EQUALS:
-        rule_value = right.selectbox(
-            "Value", key="value_", options=rule_options(target, transactions)
-        )
-        rule_value = [rule_value]
-    elif relation == RuleRelation.CONTAINS:
-        rule_value = right.text_input("Value", key="value_")
-        rule_value = [rule_value]
-    elif relation == RuleRelation.ONE_OF:
-        rule_value = right.multiselect(
-            "Values", key="value_", options=rule_options(target, transactions)
-        )
-    else:
-        st.write("RuleRelation not implemented.")
-
-    left, right = st.columns([1, 1])
-    action = left.selectbox("Action", list(RuleAction))
-    if action == RuleAction.CATEGORIZE:
-        category = right.text_input("Category")
-    else:
-        category = right.selectbox("Account", options=st.session_state.accounts.keys())
-
-    st.markdown(
-        f"**Rule:** `IF` *{target}* `{relation}` *{rule_value}* `THEN` *{action}* `=` *{category}*."
-    )
-
-    if st.button("Add rule"):
-        conditions = [RuleCondition(target, relation, rule_value)]
-        rule = Rule(conditions, action, category)
         try:
-            expense_tracker.add_rule(rule)
-        except ValueError as e:
-            st.error(f"Error adding rule: {e}")
-            return
-        expense_tracker.categorize_transactions()
-        st.success(f"Rule added: {rule}")
-        io_utils.write_expense_tracker(expense_tracker)
-        st.experimental_rerun()
+            self.app_config = io_utils.try_load_json_to_dict(config_path)
+        except FileNotFoundError as e:
+            raise FileNotFoundError(f"Error while loading config: {e}")
 
+        self.logger.info("Loaded app config: %s", self.app_config)
 
-def delete_rule(expense_tracker: ExpenseTracker):
-    for rule in expense_tracker.rules:
-        conditions_pretty = f", {rule.operator} ".join(
-            [
-                f"*{condition.field}* `{condition.relation}` *{condition.values}*"
-                for condition in rule.conditions
-            ]
+        st.set_page_config(
+            page_title=self.app_config["application_name"],
+            page_icon="💸",
         )
-        col1, col2 = st.columns([3, 1])
-        rule_pretty = f"**Rule:** `IF` {conditions_pretty} `THEN` *{rule.action}* `=` *{rule.category}*."
-        col1.markdown(rule_pretty)
-        if col2.button(
-            "❌",
-            key=str(uuid.uuid4()),
-            on_click=delete_rule_callback,
-            args=(
-                expense_tracker,
-                rule,
-            ),
-        ):
-            pass
 
+        self._remove_streamlit_footer()
+        self.logger.info("Removed Streamlit footer")
 
-# I have no idea why, but this way it works. If I have this code
-# in the delete_rule function, it won't work.
-def delete_rule_callback(expense_tracker, rule: Rule):
-    expense_tracker.delete_rule(rule)
-    expense_tracker.categorize_transactions()
-    io_utils.write_expense_tracker(expense_tracker)
-    st.toast("Rule deleted.")
-
-
-def get_expense_tracker_from_session_state():
-    if "expense_tracker" not in st.session_state:
-        BASE_LOGGER.info(
-            "No expense tracker in session. Initializing expense tracker..."
+        try:
+            self.expense_tracker = ExpenseTracker.from_dict(
+                io_utils.try_load_json_to_dict(data_path)
+            )
+        except FileNotFoundError as e:
+            raise FileNotFoundError(f"Error while loading ExpenseTracker data: {e}")
+        self.logger.info(
+            "Loaded ExpenseTracker! Loaded %s accounts, %s rules, and %s transactions.",
+            len(self.expense_tracker.accounts),
+            len(self.expense_tracker.rules),
+            len(self.expense_tracker.transactions),
         )
-        st.session_state["expense_tracker"] = ExpenseTracker()
-    return st.session_state["expense_tracker"]
 
+    def _remove_streamlit_footer(self):
+        """Sets footer style to hidden to hide Streamlit footer."""
+        hide_footer_style = """
+        <style>
+        footer {visibility: hidden;}
+        """
+        st.markdown(hide_footer_style, unsafe_allow_html=True)
 
-def save_expense_tracker_to_session_state(expense_tracker: ExpenseTracker):
-    st.session_state["expense_tracker"] = expense_tracker
+    def save_expense_tracker_to_session_state(self):
+        st.session_state["expense_tracker"] = self.expense_tracker
 
+    def run(self):
+        """Runs the app. Creates all streamlit components."""
+        st.title("💸 centzz")
+        st.caption("Your dead-simple personal finances app")
 
-def display_transactions(expense_tracker: ExpenseTracker) -> None:
-    transactions = expense_tracker.get_transactions()
-    if not transactions:
-        st.write("No transactions yet...")
-        return
-    st.dataframe(transactions)
+        overview_tab, accounts_tab, graphs_tab, transactions_tab, rules_tab = st.tabs(
+            ["Overview", "Accounts", "Graphs", "Transactions", "Rules"]
+        )
 
+        with overview_tab:
+            self.display_overview_tab()
 
-def display_accounts(expense_tracker: ExpenseTracker) -> None:
-    if not expense_tracker.accounts:
-        st.write("No accounts yet...")
-        return
-    st.dataframe([account.as_dict() for account in expense_tracker.accounts.values()])
+        with accounts_tab:
+            self.display_accounts_tab()
 
+        with graphs_tab:
+            self.display_graphs_tab()
 
-def main():
-    logging.basicConfig(
-        format="%(levelname)s %(asctime)s - %(name)s: %(message)s",
-        level=logging.DEBUG,
-    )
-    app_config = io_utils.load_app_config()
-    BASE_LOGGER.info("Loaded app config: %s", app_config)
-    st.set_page_config(
-        page_title=app_config["application_name"],
-        page_icon="💸",
-    )
-    state.initialize_state()
+        with transactions_tab:
+            self.display_transactions_tab()
 
-    st.title("💸 centzz")
-    st.caption("Your dead-simple personal finances app")
+        with rules_tab:
+            self.display_rules_tab()
 
-    expense_tracker = io_utils.load_expense_tracker()
-    save_expense_tracker_to_session_state(expense_tracker)
-
-    overview_tab, accounts_tab, graphs_tab, transactions_tab, rules_tab = st.tabs(
-        ["Overview", "Accounts", "Graphs", "Transactions", "Rules"]
-    )
-
-    with overview_tab:
+    def display_overview_tab(self):
         st.metric(
             "Total balance",
-            f"{expense_tracker.balance:.2f} {expense_tracker.config.default_currency}",
+            f"{self.expense_tracker.balance:.2f} {self.expense_tracker.config.default_currency}",
         )
 
         st.header("Accounts")
-        display_accounts(expense_tracker)
+        self.display_accounts()
 
         # Display current transactions
         st.header("Transactions")
-        transactions = expense_tracker.get_transactions()
+        transactions = self.expense_tracker.transactions
         if not transactions:
             st.write("No transactions yet...")
         else:
-            render.transactions_table(transactions)
+            self.display_transactions()
 
         # Plots
         st.header("Plots")
@@ -240,72 +161,113 @@ def main():
         else:
             st.write("No data to plot yet...")
 
-    with accounts_tab:
+    def display_accounts_tab(self):
         st.header("🏦 Accounts")
-
         st.subheader("Overview")
+        self.display_accounts()
+        self.display_add_new_account()
+        self.display_delete_account()
 
-        display_accounts(expense_tracker)
-
-        with st.expander("Add new account"):
-            account_input = {
-                "name": st.text_input("Account name"),
-                "currency": st.selectbox("Currency", ["CHF", "EUR", "USD"]),
-                # TODO: I'm pretty sure I'm ignoring this. I should update the code to use this.
-                "starting_balance": st.number_input("Initial balance"),
-            }
-
-            account_input["currency"] = Currency(account_input["currency"])
-            # Initialize balance with starting balance
-            account_input["balance"] = account_input["starting_balance"]
-            account = Account.from_dict(account_input)
-
-            if not account.is_valid():
-                st.error("Account name must be filled in.")
-
-            if st.button("Create account"):
-                try:
-                    expense_tracker.add_account(account)
-                except ValueError as e:
-                    st.error(f"Error adding account: {e}")
-                    return
-                st.success(f"Account {account.name} created.")
-                save_expense_tracker_to_session_state(expense_tracker)
-                io_utils.write_expense_tracker(expense_tracker)
-                # st.experimental_rerun()
-
-        with st.expander("Delete account"):
-            account_to_delete = st.selectbox(
-                "Account to delete", expense_tracker.accounts.keys()
-            )
-            if st.button("Delete account"):
-                del expense_tracker.accounts[account_to_delete]
-                st.success(f"Account {account_to_delete} deleted.")
-                io_utils.write_expense_tracker(expense_tracker)
-                st.experimental_rerun()
-
-    with graphs_tab:
+    def display_graphs_tab(self):
         st.header("📈 Graphs")
-        if not expense_tracker.accounts:
+        if not self.expense_tracker.accounts:
             st.write("No accounts found... Please add an account first.")
-            return
-        transactions = expense_tracker.get_transactions()
+
+        transactions = self.expense_tracker.transactions
         if not transactions:
             st.write("No transactions found... Please add transactions first.")
-            return
-        st.write("Graphs are coming soon!")
+        else:
+            selected_accounts = st.multiselect(
+                "Choose accounts",
+                self.expense_tracker.accounts.keys(),
+                default=self.expense_tracker.accounts.keys(),
+            )
+            col1, col2 = st.columns(2)
+            aggregation_period = col1.selectbox("Group by", ["Day", "Month", "Year"])
+            aggregate_by = col2.selectbox("and", ["Category", "Account"])
 
-    with transactions_tab:
+            df = pd.DataFrame([transaction.as_dict() for transaction in transactions])
+            df["date"] = pd.to_datetime(df["date"])
+
+            min_date = df["date"].min().date()
+            max_date = df["date"].max().date()
+
+            col3, col4 = st.columns(2)
+            with col3:
+                start_date = st.date_input(
+                    "Start date", min_date, min_value=min_date, max_value=max_date
+                )
+            with col4:
+                end_date = st.date_input(
+                    "End date", max_date, min_value=min_date, max_value=max_date
+                )
+
+            if start_date > end_date:
+                st.error("End date must fall after start date.")
+                return
+
+            # Filter to keep only transactions between start and end date
+            df = df[
+                (df["date"] >= pd.Timestamp(start_date))
+                & (df["date"] <= pd.Timestamp(end_date))
+            ]
+            # Filter to keep only selected accounts
+            df = df[df["account"].isin(selected_accounts)]
+
+            # Running balance for line plot over time. amount = credit - debit
+            # TODO: Need to adjust with starting balance for each account
+            running_balance_df = pd.DataFrame(
+                {
+                    "date": df["date"],
+                    "amount": df["credit"] - df["debit"],
+                }
+            )
+            running_balance_df.sort_values("date", inplace=True)
+            running_balance_df["balance"] = running_balance_df["amount"].cumsum()
+
+            # Group by (day|month|year) and (category|account)
+            freq = "M"
+            if aggregation_period == "Day":
+                freq = "D"
+            elif aggregation_period == "Year":
+                freq = "Y"
+            aggregate_by = aggregate_by.lower()
+
+            expenses_df = pd.DataFrame(
+                [
+                    {
+                        "date": transaction.date,
+                        "account": transaction.account,
+                        "category": transaction.category,
+                        "amount": transaction.debit,
+                    }
+                    for transaction in transactions
+                    if transaction.debit > 0 and transaction.category != "Transfer"
+                ]
+            )
+            expenses_df = expenses_df[expenses_df["account"].isin(selected_accounts)]
+            expenses_df["date"] = pd.to_datetime(expenses_df["date"])
+            expenses_df = (
+                expenses_df.groupby([pd.Grouper(key="date", freq=freq), aggregate_by])[
+                    "amount"
+                ]
+                .sum()
+                .unstack(fill_value=0)
+            )
+
+            col5, col6 = st.columns(2)
+            with col5:
+                plotting.create_line_chart(
+                    running_balance_df, "date", "balance", "Running Balance Over Time"
+                )
+            with col6:
+                plotting.create_bar_chart(expenses_df, "Expenses Over Time")
+
+    def display_transactions_tab(self):
         st.header("📖 Transactions")
 
-        if not expense_tracker.accounts:
+        if not self.expense_tracker.accounts:
             st.write("No accounts found... Please add an account first.")
-            return
-
-        current_transactions = expense_tracker.get_transactions()
-        if not current_transactions:
-            st.write("No transactions yet...")
-            return
 
         with st.expander("Add transactions from CSV"):
             if csv_file := st.file_uploader(
@@ -334,8 +296,20 @@ def main():
 
                 account_selection = st.selectbox(
                     "Account",
-                    [account.name for account in expense_tracker.accounts.values()],
+                    [
+                        account.name
+                        for account in self.expense_tracker.accounts.values()
+                    ],
                 )
+
+                overwrite = st.checkbox("Overwrite existing transactions")
+
+                if overwrite:
+                    st.warning(
+                        "This will overwrite existing transactions with the same "
+                        "transaction ID. Any manual modifications to these transactions will be lost.",
+                        icon="⚠️",
+                    )
 
                 # Make sure that all headers are different, and that all headers are selected
                 if len(set(headers.values())) != len(headers.values()):
@@ -369,18 +343,25 @@ def main():
                                 if not pd.isna(row[headers["credit"]])
                                 else 0.0,
                                 account=account_selection,
-                                currency=expense_tracker.accounts[
+                                currency=self.expense_tracker.accounts[
                                     account_selection
                                 ].currency,
                             )
                             for _, row in df.iterrows()
                         ]
-                        expense_tracker.accounts[account_selection].add_transactions(
-                            new_transactions, overwrite_if_exists=True
+                        num_duplicates = self.expense_tracker.accounts[
+                            account_selection
+                        ].add_transactions(
+                            new_transactions, overwrite_if_exists=overwrite
                         )
-                        st.success(f"{len(new_transactions)} transactions added.")
-                        save_expense_tracker_to_session_state(expense_tracker)
-                        io_utils.write_expense_tracker(expense_tracker)
+                        with st.spinner(
+                            f"Adding {len(new_transactions)} transactions... {num_duplicates} duplicates will {'' if overwrite else 'not '}be overwritten."
+                        ):
+                            # TODO: This is horrendous, find a better way to display the message :')
+                            # The problem with toast is that I can't access the variables in the callback
+                            time.sleep(2)
+                        self.save_expense_tracker_to_session_state()
+                        io_utils.write_expense_tracker(self.expense_tracker)
                         st.experimental_rerun()
                     except Exception as e:
                         st.error(
@@ -388,22 +369,20 @@ def main():
                         )
 
         st.caption("All transactions")
-        render.transactions_table(current_transactions)
+        current_transactions = self.expense_tracker.transactions
+        if not current_transactions:
+            st.write("No transactions yet...")
+        else:
+            self.display_transactions()
+            self.display_delete_all_transactions()
 
-        if st.button("Delete all transactions"):
-            for account in expense_tracker.accounts.values():
-                account.transactions = {}
-            st.success("All transactions deleted.")
-            io_utils.write_expense_tracker(expense_tracker)
-            st.experimental_rerun()
-
-    with rules_tab:
+    def display_rules_tab(self):
         st.header("📝 Rules")
 
-        if not expense_tracker.rules:
+        if not self.expense_tracker.rules:
             st.write("No rules yet...")
         else:
-            df = pd.DataFrame([rule.as_dict() for rule in expense_tracker.rules])
+            df = pd.DataFrame([rule.as_dict() for rule in self.expense_tracker.rules])
             df["conditions"] = df["conditions"].apply(
                 lambda conditions: ", ".join(
                     [
@@ -424,10 +403,253 @@ def main():
 
         with st.expander("Add new rule"):
             # TODO: Update to use ExpenseTracker
-            add_rule(expense_tracker)
+            self.display_add_new_rule()
         with st.expander("Delete rule"):
             # TODO: Update to use ExpenseTracker
-            delete_rule(expense_tracker)
+            self.display_delete_rule()
+
+    # -----------------------------
+    # DISPLAY X COMPONENT FUNCTIONS
+    # -----------------------------
+    # All functions below are to modularize displaying
+    # different parts of the app.
+
+    # -----------------------------
+    # Account functions
+    # -----------------------------
+
+    def display_accounts(self) -> None:
+        """
+        Displays all accounts in ExpenseTracker.
+        If no accounts are found, returns early, and prints message.
+        """
+        if not self.expense_tracker.accounts:
+            st.write("No accounts yet...")
+            return
+        st.dataframe(
+            [account.as_dict() for account in self.expense_tracker.accounts.values()],
+            column_config={
+                "name": st.column_config.TextColumn(label="Account name"),
+                "currency": st.column_config.SelectboxColumn(
+                    label="Currency", options=list(Currency)
+                ),
+                "balance": st.column_config.NumberColumn(label="Balance"),
+                "starting_balance": None,  # hide starting balance
+            },
+            use_container_width=True,
+        )
+
+    def display_add_new_account(self):
+        """Displays a form to add a new account to ExpenseTracker."""
+
+        with st.expander("Add new account"):
+            account_input = {
+                "name": st.text_input("Account name"),
+                "currency": st.selectbox("Currency", ["CHF", "EUR", "USD"]),
+                # TODO: I'm pretty sure I'm ignoring this. I should update the code to use this.
+                "starting_balance": st.number_input("Initial balance"),
+            }
+
+            account_input["currency"] = Currency(account_input["currency"])
+            # Initialize balance with starting balance
+            account_input["balance"] = account_input["starting_balance"]
+            account = Account.from_dict(account_input)
+
+            if not account.is_valid():
+                st.error("Account name must be filled in.")
+
+            if st.button("Create account"):
+                try:
+                    self.expense_tracker.add_account(account)
+                except ValueError as e:
+                    st.error(f"Error adding account: {e}")
+                    return
+                st.success(f"Account {account.name} created.")
+                self.save_expense_tracker_to_session_state()
+                io_utils.write_expense_tracker(self.expense_tracker)
+                st.experimental_rerun()
+
+    def display_delete_account(self):
+        """Displays a form to delete an account from ExpenseTracker."""
+
+        with st.expander("Delete account"):
+            account_to_delete = st.selectbox(
+                "Account to delete", self.expense_tracker.accounts.keys()
+            )
+            if st.button("Delete account"):
+                del self.expense_tracker.accounts[account_to_delete]
+                st.success(f"Account {account_to_delete} deleted.")
+                io_utils.write_expense_tracker(self.expense_tracker)
+                st.experimental_rerun()
+
+    def display_transactions(self) -> None:
+        transactions = sorted(
+            [
+                transaction.as_dict()
+                for transaction in self.expense_tracker.transactions
+            ],
+            key=lambda t: t["date"],
+            reverse=True,  # Most recent transaction first
+        )
+        st.dataframe(
+            transactions,
+            hide_index=True,
+            column_config={
+                "date": st.column_config.DateColumn(
+                    label="Date",
+                    format="DD/MM/YYYY",
+                ),
+                "payee": st.column_config.TextColumn(
+                    label="Payee",
+                ),
+                "description": st.column_config.TextColumn(
+                    label="Description",
+                ),
+                "debit": st.column_config.NumberColumn(
+                    label="Debit",
+                ),
+                "credit": st.column_config.NumberColumn(
+                    label="Credit",
+                ),
+                "account": st.column_config.TextColumn(
+                    label="Account",
+                ),
+                "currency": st.column_config.SelectboxColumn(
+                    label="Currency", options=[item.value for item in Currency]
+                ),
+                "category": st.column_config.TextColumn(
+                    label="Category",
+                ),
+            },
+            column_order=[
+                "date",
+                "account",
+                "payee",
+                "description",
+                "debit",
+                "credit",
+                "currency",
+                "category",
+            ],  # Hide transaction_id, transfer_to, transfer_from
+            use_container_width=True,
+        )
+
+    def display_delete_all_transactions(self):
+        col1, col2 = st.columns([2, 1])
+        delete_all = col1.checkbox("Delete all transactions")
+        if delete_all:
+            st.warning(
+                "This will delete all transactions. Action cannot be undone.", icon="⚠️"
+            )
+        if col2.button("Delete") and delete_all:
+            for account in self.expense_tracker.accounts.values():
+                account.transactions = {}
+            st.success("All transactions deleted.")
+            io_utils.write_expense_tracker(self.expense_tracker)
+            st.experimental_rerun()
+
+    def display_add_new_rule(self):
+        transactions = self.expense_tracker.transactions
+        if not transactions:
+            st.write("No transactions yet... Please add transactions first.")
+            return
+
+        # TODO: I need to find a way to add support for RuleOperator (AND, OR, NOT)
+
+        left, middle, right = st.columns([1, 1, 2])
+        target = left.selectbox(
+            "Target", list(Transaction.data_model().keys()), key="rule_target_selectbox"
+        )
+        relation = middle.selectbox(
+            "Relation", list(RuleRelation), key="rule_relation_selectbox"
+        )
+        if relation == RuleRelation.EQUALS:
+            rule_value = right.selectbox(
+                "Value",
+                options=self.expense_tracker.get_entries_for_transaction_field(target),
+                key="rule_value_selectbox",
+            )
+            rule_value = [rule_value]
+        elif relation == RuleRelation.CONTAINS:
+            rule_value = right.text_input("Value", key="rule_value_text_input")
+            rule_value = [rule_value]
+        elif relation == RuleRelation.ONE_OF:
+            rule_value = right.multiselect(
+                "Values",
+                options=self.expense_tracker.get_entries_for_transaction_field(target),
+                key="rule_value_multiselect",
+            )
+        else:
+            st.write("RuleRelation not implemented.")
+
+        left, right = st.columns([1, 1])
+        action = left.selectbox("Action", list(RuleAction))
+        if action == RuleAction.CATEGORIZE:
+            category = right.text_input("Category", key="rule_category_text_input")
+        else:
+            category = right.selectbox(
+                "Account",
+                options=self.expense_tracker.accounts.keys(),
+                key="rule_category_selectbox",
+            )
+
+        st.markdown(
+            f"---\n\n**Resulting Rule:**\n\n`IF` *{target}* `{relation}` *{rule_value}* `THEN` *{action}* `=` *{category}*."
+        )
+
+        if st.button("Add rule"):
+            conditions = [RuleCondition(target, relation, rule_value)]
+            rule = Rule(conditions, action, category)
+            try:
+                self.expense_tracker.add_rule(rule)
+            except ValueError as e:
+                st.error(f"Error adding rule: {e}")
+                return
+            self.expense_tracker.categorize_transactions()
+            st.success(f"Rule added: {rule}")
+            io_utils.write_expense_tracker(self.expense_tracker)
+            st.experimental_rerun()
+
+    def display_delete_rule(self):
+        for rule in self.expense_tracker.rules:
+            conditions_pretty = f", {rule.operator} ".join(
+                [
+                    f"*{condition.field}* `{condition.relation}` *{condition.values}*"
+                    for condition in rule.conditions
+                ]
+            )
+            col1, col2 = st.columns([3, 1])
+            rule_pretty = f"**Rule:** `IF` {conditions_pretty} `THEN` *{rule.action}* `=` *{rule.category}*."
+            col1.markdown(rule_pretty)
+            if col2.button(
+                "❌",
+                key=str(uuid.uuid4()),
+                use_container_width=True,
+                on_click=delete_rule_callback,
+                args=(
+                    self.expense_tracker,
+                    rule,
+                ),
+            ):
+                pass
+
+
+# I have no idea why, but having this code as a callback works.
+# The same code in the display_delete_rule function, it won't work.
+def delete_rule_callback(expense_tracker, rule: Rule):
+    expense_tracker.delete_rule(rule)
+    expense_tracker.categorize_transactions()
+    io_utils.write_expense_tracker(expense_tracker)
+    st.toast("Rule deleted.")
+
+
+def main():
+    logging.basicConfig(
+        format="%(levelname)s %(asctime)s - %(name)s: %(message)s",
+        level=logging.DEBUG,
+    )
+    app = ExpenseTrackerApp(config_path="config.json", data_path="_data/data.json")
+    app.run()
 
 
 if __name__ == "__main__":

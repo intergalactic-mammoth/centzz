@@ -38,7 +38,7 @@ class Transaction:
             "transfer_from": str,
         }
 
-    def _check_condition(self, condition: RuleCondition) -> bool:
+    def _condition_applies(self, condition: RuleCondition) -> bool:
         field = condition.field
         relation = condition.relation
         values = condition.values
@@ -53,14 +53,23 @@ class Transaction:
         else:
             raise ValueError(f"Unknown relation {relation}")
 
-    def _apply_rule(self, rule: Rule) -> bool:
-        return all(self._check_condition(condition) for condition in rule.conditions)
+    def _rule_applies(self, rule: Rule) -> bool:
+        return all(self._condition_applies(condition) for condition in rule.conditions)
 
+    # TODO: I need to figure out a deterministic way of applying
+    # rule precedence, and how to handle rule collisions.
     def categorize(self, rules: list[Rule]) -> None:
         matched = False
         for rule in rules:
-            if self._apply_rule(rule):
+            if self._rule_applies(rule):
                 self.category = rule.category
+                if rule.action == "transfer to":
+                    self.transfer_to = rule.category
+                    self.category = "Transfer"
+                elif rule.action == "transfer from":
+                    self.transfer_from = rule.category
+                    self.category = "Transfer"
+
                 matched = True
                 break
 
