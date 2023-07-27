@@ -263,17 +263,16 @@ def main():
             if not account.is_valid():
                 st.error("Account name must be filled in.")
 
-            if account.already_exists(expense_tracker.accounts):
-                st.error(f'Account with name "{account.name}" already exists.')
-                return
-
             if st.button("Create account"):
-                expense_tracker.add_account(account)
+                try:
+                    expense_tracker.add_account(account)
+                except ValueError as e:
+                    st.error(f"Error adding account: {e}")
+                    return
                 st.success(f"Account {account.name} created.")
                 save_expense_tracker_to_session_state(expense_tracker)
-                # TODO: Handle writing with new ExpenseTracker
                 io_utils.write_expense_tracker(expense_tracker)
-                st.experimental_rerun()
+                # st.experimental_rerun()
 
         with st.expander("Delete account"):
             account_to_delete = st.selectbox(
@@ -285,11 +284,27 @@ def main():
                 io_utils.write_expense_tracker(expense_tracker)
                 st.experimental_rerun()
 
+    with graphs_tab:
+        st.header("📈 Graphs")
+        if not expense_tracker.accounts:
+            st.write("No accounts found... Please add an account first.")
+            return
+        transactions = expense_tracker.get_transactions()
+        if not transactions:
+            st.write("No transactions found... Please add transactions first.")
+            return
+        st.write("Graphs are coming soon!")
+
     with transactions_tab:
         st.header("📖 Transactions")
 
         if not expense_tracker.accounts:
             st.write("No accounts found... Please add an account first.")
+            return
+
+        current_transactions = expense_tracker.get_transactions()
+        if not current_transactions:
+            st.write("No transactions yet...")
             return
 
         with st.expander("Add transactions from CSV"):
@@ -372,13 +387,15 @@ def main():
                             f"Error reading CSV file: {e}.\nDetailed error:\n{traceback.format_exc()}"
                         )
 
-        current_transactions = expense_tracker.get_transactions()
-        if not current_transactions:
-            st.write("No transactions yet...")
-            return
-
         st.caption("All transactions")
         render.transactions_table(current_transactions)
+
+        if st.button("Delete all transactions"):
+            for account in expense_tracker.accounts.values():
+                account.transactions = {}
+            st.success("All transactions deleted.")
+            io_utils.write_expense_tracker(expense_tracker)
+            st.experimental_rerun()
 
     with rules_tab:
         st.header("📝 Rules")
