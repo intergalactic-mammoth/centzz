@@ -82,7 +82,10 @@ class ExpenseTracker:
     @classmethod
     def from_dict(cls, expense_tracker_dict: dict) -> "ExpenseTracker":
         expense_tracker = cls()
-        expense_tracker.config = ExpenseTrackerConfig(**expense_tracker_dict["config"])
+        config = expense_tracker_dict.get("config")
+        if config:
+            expense_tracker.config = ExpenseTrackerConfig(**config)
+
         for account_dict in expense_tracker_dict["accounts"]:
             account = Account.from_dict(account_dict)
             expense_tracker.add_account(account)
