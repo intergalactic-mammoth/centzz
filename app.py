@@ -40,11 +40,7 @@ def add_rule(expense_tracker: ExpenseTracker):
     target = left.selectbox(
         "Target", list(Transaction.data_model().keys()), key="target_"
     )
-    relation = middle.selectbox(
-        "Relation",
-        [relation for relation in RuleRelation],
-        key="relation_",
-    )
+    relation = middle.selectbox("Relation", list(RuleRelation), key="relation_")
     if relation == RuleRelation.EQUALS:
         rule_value = right.selectbox(
             "Value", key="value_", options=rule_options(target, transactions)
@@ -61,7 +57,7 @@ def add_rule(expense_tracker: ExpenseTracker):
         st.write("RuleRelation not implemented.")
 
     left, right = st.columns([1, 1])
-    action = left.selectbox("Action", [action for action in RuleAction])
+    action = left.selectbox("Action", list(RuleAction))
     if action == RuleAction.CATEGORIZE:
         category = right.text_input("Category")
     else:
