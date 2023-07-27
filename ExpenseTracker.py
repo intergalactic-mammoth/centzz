@@ -85,14 +85,21 @@ class ExpenseTracker:
         config = expense_tracker_dict.get("config")
         if config:
             expense_tracker.config = ExpenseTrackerConfig(**config)
-
-        for account_dict in expense_tracker_dict["accounts"]:
-            account = Account.from_dict(account_dict)
-            expense_tracker.add_account(account)
-        for rule_dict in expense_tracker_dict["rules"]:
-            rule = Rule.from_dict(rule_dict)
-            expense_tracker.add_rule(rule)
-        for transaction_dict in expense_tracker_dict["transactions"]:
-            transaction = Transaction.from_dict(transaction_dict)
-            expense_tracker.accounts[transaction.account].add_transaction(transaction)
+        accounts = expense_tracker_dict.get("accounts")
+        if accounts:
+            for account_dict in accounts:
+                account = Account.from_dict(account_dict)
+                expense_tracker.add_account(account)
+        rules = expense_tracker_dict.get("rules")
+        if rules:
+            for rule_dict in rules:
+                rule = Rule.from_dict(rule_dict)
+                expense_tracker.add_rule(rule)
+        transactions = expense_tracker_dict.get("transactions")
+        if transactions:
+            for transaction_dict in transactions:
+                transaction = Transaction.from_dict(transaction_dict)
+                expense_tracker.accounts[transaction.account].add_transaction(
+                    transaction
+                )
         return expense_tracker
