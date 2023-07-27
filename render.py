@@ -1,7 +1,8 @@
 import streamlit as st
 import pandas as pd
 
-from Account import Currency
+from Currency import Currency
+from Transaction import Transaction
 
 
 def get_accounts_column_config():
@@ -48,10 +49,10 @@ def get_transactions_column_config():
     }
 
 
-def transactions_table(transactions: list):
+def transactions_table(transactions: list[Transaction]):
     if not transactions:
         return
-    df = pd.DataFrame(transactions)
+    df = pd.DataFrame([transaction.as_dict() for transaction in transactions])
     # Convert string date to datetime
     df["date"] = pd.to_datetime(df["date"])
     # Sort by date

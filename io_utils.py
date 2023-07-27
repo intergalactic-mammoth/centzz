@@ -3,6 +3,8 @@ import os
 
 import streamlit as st
 
+from ExpenseTracker import ExpenseTracker
+
 
 def load_app_config():
     return try_load_json_to_dict("config.json")
@@ -30,10 +32,26 @@ def write_json_to_file(filename: str, data: dict):
         json.dump(data, f)
 
 
-def load_data():
+def load_data_to_session_state():
     st.session_state.accounts = try_load_json_to_dict("_data/accounts.json")
     st.session_state.transactions = try_load_json_to_dict("_data/transactions.json")
     st.session_state.rules = try_load_json_to_dict("_data/rules.json")
+
+
+def load_data_to_dict() -> dict:
+    return {
+        "accounts": try_load_json_to_dict("_data/accounts.json"),
+        "transactions": try_load_json_to_dict("_data/transactions.json"),
+        "rules": try_load_json_to_dict("_data/rules.json"),
+    }
+
+
+def load_expense_tracker() -> ExpenseTracker:
+    return ExpenseTracker.from_dict(try_load_json_to_dict("_data/data.json"))
+
+
+def write_expense_tracker(expense_tracker: ExpenseTracker):
+    write_json_to_file("_data/data.json", expense_tracker.as_dict())
 
 
 def write_data():

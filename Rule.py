@@ -1,5 +1,6 @@
-import enum
 import attr
+import enum
+import logging
 
 
 class RuleOperator(enum.StrEnum):
@@ -19,19 +20,20 @@ class RuleAction(enum.StrEnum):
     CATEGORIZE = "categorize"
 
 
-@attr.s(auto_attribs=True)
+@attr.s(auto_attribs=True, frozen=True)
 class RuleCondition:
     field: str
     relation: RuleRelation
     values: list
 
 
-@attr.s(auto_attribs=True)
+@attr.s(auto_attribs=True, frozen=True)
 class Rule:
     conditions: list[RuleCondition]
     action: RuleAction
     category: str
-    type: RuleOperator = RuleOperator.ALL
+    operator: RuleOperator = RuleOperator.ALL
+    logger: logging.Logger = logging.getLogger(__name__)
 
     def as_dict(self) -> dict:
         return {
@@ -45,7 +47,7 @@ class Rule:
             ],
             "action": self.action,
             "category": self.category,
-            "type": self.type.value,
+            "operator": self.operator.value,
         }
 
     @classmethod
@@ -53,13 +55,13 @@ class Rule:
         return cls(
             conditions=[
                 RuleCondition(
-                    field=rule_dict["conditions"][i]["field"],
-                    relation=RuleRelation[rule_dict["conditions"][i]["relation"]],
-                    values=rule_dict["conditions"][i]["values"],
+                    field=condition["field"],
+                    relation=RuleRelation(condition["relation"]),
+                    values=condition["values"],
                 )
-                for i in range(len(rule_dict["conditions"]))
+                for condition in rule_dict["conditions"]
             ],
-            action=RuleAction[rule_dict["action"]],
+            action=RuleAction(rule_dict["action"]),
             category=rule_dict["category"],
-            type=RuleOperator[rule_dict["type"]],
+            operator=RuleOperator(rule_dict["operator"]),
         )

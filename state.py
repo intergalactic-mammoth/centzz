@@ -13,7 +13,7 @@ def remove_footer():
 
 
 def initialize_state():
-    io_utils.load_data()
+    io_utils.load_data_to_session_state()
     remove_footer()
 
 

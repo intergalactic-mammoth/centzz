@@ -1,16 +1,20 @@
 import attr
 
-from Account import Account, Currency
-from Rule import RuleRelation
+from Currency import Currency
+from Rule import RuleRelation, Rule, RuleCondition
 
 
 @attr.s(auto_attribs=True)
 class Transaction:
+    """
+    Debit and credit are always positive.
+    """
+
     transaction_id: str
     date: str
     payee: str
     description: str
-    debit: float
+    debit: float = attr.ib(converter=abs)
     credit: float
     account: str
     currency: Currency
@@ -34,10 +38,10 @@ class Transaction:
             "transfer_from": str,
         }
 
-    def _check_condition(self, condition: dict) -> bool:
-        field = condition["field"]
-        relation = condition["relation"]
-        values = condition["values"]
+    def _check_condition(self, condition: RuleCondition) -> bool:
+        field = condition.field
+        relation = condition.relation
+        values = condition.values
 
         if relation == RuleRelation.CONTAINS.value:
             return any(value in getattr(self, field) for value in values)
@@ -49,16 +53,14 @@ class Transaction:
         else:
             raise ValueError(f"Unknown relation {relation}")
 
-    def _apply_rule(self, rule: dict) -> bool:
-        return all(
-            self._check_condition(condition) for condition in rule["conditions"]
-        )
+    def _apply_rule(self, rule: Rule) -> bool:
+        return all(self._check_condition(condition) for condition in rule.conditions)
 
-    def categorize(self, rules: list[dict]) -> None:
+    def categorize(self, rules: list[Rule]) -> None:
         matched = False
         for rule in rules:
             if self._apply_rule(rule):
-                self.category = rule["category"]
+                self.category = rule.category
                 matched = True
                 break
 
