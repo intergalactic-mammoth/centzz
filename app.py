@@ -254,9 +254,6 @@ def main():
                 # TODO: I'm pretty sure I'm ignoring this. I should update the code to use this.
                 "starting_balance": st.number_input("Initial balance"),
             }
-            st.caption(
-                "Bank and account number are optional. They are used for automatically detecting transfers between accounts."
-            )
 
             account_input["currency"] = Currency(account_input["currency"])
             # Initialize balance with starting balance
@@ -264,7 +261,7 @@ def main():
             account = Account.from_dict(account_input)
 
             if not account.is_valid():
-                st.error("Account name and must be filled in.")
+                st.error("Account name must be filled in.")
 
             if account.already_exists(expense_tracker.accounts):
                 st.error(f'Account with name "{account.name}" already exists.')
