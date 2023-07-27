@@ -169,6 +169,8 @@ class ExpenseTrackerApp:
         self.display_delete_account()
 
     def display_graphs_tab(self):
+        # TODO: Make graphs modular to reuse also in overview tab
+        # TODO: Add donut chart (altair) :)
         st.header("📈 Graphs")
         if not self.expense_tracker.accounts:
             st.write("No accounts found... Please add an account first.")
