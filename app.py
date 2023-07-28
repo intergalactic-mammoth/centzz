@@ -9,6 +9,8 @@ import streamlit as st
 import io_utils
 import plotting
 
+from analytics_utils import GroupingPeriod, GroupBy, filter_transactions_by_dates
+
 from Account import Account
 from Currency import Currency
 from ExpenseTracker import ExpenseTracker
@@ -34,7 +36,7 @@ class ExpenseTrackerApp:
         try:
             self.app_config = io_utils.try_load_json_to_dict(config_path)
         except FileNotFoundError as e:
-            raise FileNotFoundError(f"Error while loading config: {e}")
+            raise FileNotFoundError(f"Error while loading config: {e}") from e
 
         self.logger.info("Loaded app config: %s", self.app_config)
 
@@ -51,7 +53,9 @@ class ExpenseTrackerApp:
                 io_utils.try_load_json_to_dict(data_path)
             )
         except FileNotFoundError as e:
-            raise FileNotFoundError(f"Error while loading ExpenseTracker data: {e}")
+            raise FileNotFoundError(
+                f"Error while loading ExpenseTracker data: {e}"
+            ) from e
         self.logger.info(
             "Loaded ExpenseTracker! Loaded %s accounts, %s rules, and %s transactions.",
             len(self.expense_tracker.accounts),
@@ -67,10 +71,13 @@ class ExpenseTrackerApp:
         st.title("💸 centzz")
         st.caption("Your dead-simple personal finances app")
 
-        overview_tab, accounts_tab, graphs_tab, transactions_tab, rules_tab = st.tabs(
-            ["Overview", "Accounts", "Graphs", "Transactions", "Rules"]
-        )
-
+        (
+            overview_tab,
+            accounts_tab,
+            graphs_tab,
+            transactions_tab,
+            rules_tab,
+        ) = st.tabs(["Overview", "Accounts", "Graphs", "Transactions", "Rules"])
         with overview_tab:
             self.display_overview_tab()
 
@@ -95,72 +102,24 @@ class ExpenseTrackerApp:
         st.header("Accounts")
         self.display_accounts()
 
-        # Display current transactions
-        st.header("Transactions")
-        transactions = self.expense_tracker.transactions
-        if not transactions:
-            st.write("No transactions yet...")
+        # Expenses this month
+        st.header("Expenses this month")
+        if transactions := self.expense_tracker.transactions:
+            df = self.expense_tracker.get_grouped_expenses(
+                group_by=GroupBy.CATEGORY, period=GroupingPeriod.MONTH
+            )
+            # start_date: first day of current month
+            # end_date: current date
+            today = pd.Timestamp.today()
+            start_date = pd.Timestamp(today.year, today.month, 1)
+            df = filter_transactions_by_dates(df, start_date, today)
+            if not df.empty:
+                st.dataframe(df)
+            else:
+                st.write("No expenses recorded yet...")
+
         else:
-            self.display_transactions()
-
-        # Plots
-        st.header("Plots")
-        # Plot running balance over time
-        if transactions:
-            balance_df = pd.DataFrame(
-                {
-                    "date": transaction.date,
-                    "amount": transaction.credit - transaction.debit,
-                }
-                for transaction in transactions
-            )
-            balance_df["date"] = pd.to_datetime(balance_df["date"])
-            balance_df.sort_values("date", inplace=True)
-            balance_df["balance"] = balance_df["amount"].cumsum()
-
-            plotting.create_line_chart(
-                balance_df, "date", "balance", "Running Balance Over Time"
-            )
-
-            # Plot expenses by category and account
-            transactions_df = pd.DataFrame(
-                [
-                    {
-                        "date": transaction.date,
-                        "category": transaction.category,
-                        "amount": transaction.debit,
-                        "account": transaction.account,
-                    }
-                    for transaction in transactions
-                    if transaction.debit > 0 and transaction.category != "Transfer"
-                ]
-            )
-            transactions_df["date"] = pd.to_datetime(transactions_df["date"])
-
-            period_grouping = st.selectbox(
-                "Group expenses by", ["Day", "Month", "Year"]
-            )
-            if period_grouping == "Year":
-                transactions_df["date"] = (
-                    transactions_df["date"].dt.to_period("Y").dt.to_timestamp()
-                )
-            elif period_grouping == "Month":
-                transactions_df["date"] = (
-                    transactions_df["date"].dt.to_period("M").dt.to_timestamp()
-                )
-            else:  # Default to grouping by day
-                transactions_df["date"] = (
-                    transactions_df["date"].dt.to_period("D").dt.to_timestamp()
-                )
-            # Group by date and category
-            transactions_df = (
-                transactions_df.groupby(["date", "category"])["amount"]
-                .sum()
-                .unstack(fill_value=0)
-            )
-            plotting.create_bar_chart(transactions_df, "Expenses Over Time")
-        else:
-            st.write("No data to plot yet...")
+            st.write("No data yet...")
 
     def display_accounts_tab(self):
         st.header("🏦 Accounts")
@@ -176,18 +135,15 @@ class ExpenseTrackerApp:
         if not self.expense_tracker.accounts:
             st.write("No accounts found... Please add an account first.")
 
-        transactions = self.expense_tracker.transactions
-        if not transactions:
-            st.write("No transactions found... Please add transactions first.")
-        else:
+        if transactions := self.expense_tracker.transactions:
             selected_accounts = st.multiselect(
-                "Choose accounts",
+                "Active accounts",
                 self.expense_tracker.accounts.keys(),
                 default=self.expense_tracker.accounts.keys(),
             )
             col1, col2 = st.columns(2)
-            aggregation_period = col1.selectbox("Group by", ["Day", "Month", "Year"])
-            aggregate_by = col2.selectbox("and", ["Category", "Account"])
+            aggregation_period = col1.selectbox("Group by", list(GroupingPeriod))
+            aggregate_by = col2.selectbox("and", list(GroupBy))
 
             df = pd.DataFrame([transaction.as_dict() for transaction in transactions])
             df["date"] = pd.to_datetime(df["date"])
@@ -210,10 +166,7 @@ class ExpenseTrackerApp:
                 return
 
             # Filter to keep only transactions between start and end date
-            df = df[
-                (df["date"] >= pd.Timestamp(start_date))
-                & (df["date"] <= pd.Timestamp(end_date))
-            ]
+            df = filter_transactions_by_dates(df, start_date, end_date)
             # Filter to keep only selected accounts
             df = df[df["account"].isin(selected_accounts)]
 
@@ -225,46 +178,33 @@ class ExpenseTrackerApp:
                     "amount": df["credit"] - df["debit"],
                 }
             )
-            running_balance_df.sort_values("date", inplace=True)
+            running_balance_df = running_balance_df.sort_values("date")
             running_balance_df["balance"] = running_balance_df["amount"].cumsum()
 
-            # Group by (day|month|year) and (category|account)
-            freq = "M"
-            if aggregation_period == "Day":
-                freq = "D"
-            elif aggregation_period == "Year":
-                freq = "Y"
-            aggregate_by = aggregate_by.lower()
-
-            expenses_df = pd.DataFrame(
-                [
-                    {
-                        "date": transaction.date,
-                        "account": transaction.account,
-                        "category": transaction.category,
-                        "amount": transaction.debit,
-                    }
-                    for transaction in transactions
-                    if transaction.debit > 0 and transaction.category != "Transfer"
-                ]
+            expenses_df = self.expense_tracker.get_grouped_expenses(
+                group_by=aggregate_by,
+                period=aggregation_period,
+                accounts=selected_accounts,
             )
-            expenses_df = expenses_df[expenses_df["account"].isin(selected_accounts)]
-            expenses_df["date"] = pd.to_datetime(expenses_df["date"])
             expenses_df = (
-                expenses_df.groupby([pd.Grouper(key="date", freq=freq), aggregate_by])[
-                    "amount"
-                ]
-                .sum()
-                .unstack(fill_value=0)
-            )
-
-            col5, col6 = st.columns(2)
-            with col5:
-                plotting.create_line_chart(
-                    running_balance_df, "date", "balance", "Running Balance Over Time"
+                filter_transactions_by_dates(expenses_df, start_date, end_date)
+                .sort_values("date")
+                .pivot_table(
+                    index="date",
+                    columns=aggregate_by.lower()
+                    if aggregate_by != GroupBy.NONE
+                    else None,
+                    values="amount",
+                    fill_value=0,
                 )
-            with col6:
-                plotting.create_bar_chart(expenses_df, "Expenses Over Time")
+            )
+            plotting.create_line_chart(
+                running_balance_df, "date", "balance", "Running Balance Over Time"
+            )
+            plotting.create_bar_chart(expenses_df, "Expenses Over Time")
+
+        else:
+            st.write("No transactions found... Please add transactions first.")
 
     def display_transactions_tab(self):
         st.header("📖 Transactions")
@@ -283,7 +223,7 @@ class ExpenseTrackerApp:
                 try:
                     df = pd.read_csv(csv_file)
                 except FileNotFoundError as e:
-                    raise FileNotFoundError(f"Error while loading CSV file: {e}")
+                    raise FileNotFoundError(f"Error while loading CSV file: {e}") from e
                 transaction_id_header = st.selectbox("Transaction ID", df.columns)
                 date_header = st.selectbox("Date", df.columns)
                 payee_header = st.selectbox("Payee", df.columns)
@@ -344,12 +284,12 @@ class ExpenseTrackerApp:
                                 )
                                 if headers["description"]
                                 else "",
-                                debit=row[headers["debit"]]
-                                if not pd.isna(row[headers["debit"]])
-                                else 0.0,
-                                credit=row[headers["credit"]]
-                                if not pd.isna(row[headers["credit"]])
-                                else 0.0,
+                                debit=0.0
+                                if pd.isna(row[headers["debit"]])
+                                else row[headers["debit"]],
+                                credit=0.0
+                                if pd.isna(row[headers["credit"]])
+                                else row[headers["credit"]],
                                 account=account_selection,
                                 currency=self.expense_tracker.accounts[
                                     account_selection
@@ -367,7 +307,7 @@ class ExpenseTrackerApp:
                         ):
                             # TODO: This is horrendous, find a better way to display the message :')
                             # The problem with toast is that I can't access the variables in the callback
-                            time.sleep(2)
+                            time.sleep(2.5)
                         self.save_expense_tracker_to_session_state()
                         io_utils.write_expense_tracker(self.expense_tracker)
                         st.experimental_rerun()

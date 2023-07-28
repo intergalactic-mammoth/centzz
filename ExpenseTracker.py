@@ -1,6 +1,9 @@
 import attr
 import logging
 
+import pandas as pd
+
+from analytics_utils import GroupingPeriod, GroupBy, GROUPING_PERIOD_TO_PANDAS
 from Account import Account
 from Currency import Currency, CurrencyConverter
 from Rule import Rule
@@ -14,6 +17,12 @@ class ExpenseTrackerConfig:
 
 @attr.s(auto_attribs=True)
 class ExpenseTracker:
+    """Represents an expense tracker.
+    An expense tracker consists of multiple accounts and rules.
+
+    The tracker does not hold any transactions itself, but rather delegates them to the accounts.
+    """
+
     accounts: dict[str, Account] = attr.Factory(dict)
     rules: list[Rule] = attr.Factory(list)
     logger: logging.Logger = logging.getLogger(__name__)
@@ -21,6 +30,8 @@ class ExpenseTracker:
 
     @property
     def balance(self) -> float:
+        """Returns the balance of all accounts in the default currency.
+        The balance is calculated by adding the balance of accounts."""
         return sum(
             CurrencyConverter.convert(
                 account.balance,
@@ -32,6 +43,7 @@ class ExpenseTracker:
 
     @property
     def transactions(self) -> list[Transaction]:
+        """Returns a list of all transactions in all accounts."""
         return [
             transaction
             for account in self.accounts.values()
@@ -39,6 +51,8 @@ class ExpenseTracker:
         ]
 
     def add_account(self, account: Account) -> None:
+        """Adds an account to the ExpenseTracker.
+        Raises ValueError if the account already exists or is not valid."""
         if account.already_exists(self.accounts):
             raise ValueError("Account already exists")
         if not account.is_valid():
@@ -47,23 +61,90 @@ class ExpenseTracker:
         self.logger.debug(f"Added account {account.name}")
 
     def delete_account(self, account_name: str) -> None:
-        del self.accounts[account_name]
+        """Deletes an account from the ExpenseTracker.
+        Raises ValueError if the account does not exist."""
+        try:
+            del self.accounts[account_name]
+        except KeyError as e:
+            raise ValueError(f"Account {account_name} does not exist: {e}") from e
         self.logger.debug(f"Deleted account {account_name}")
 
     def add_rule(self, rule: Rule) -> None:
+        """Adds a rule to the ExpenseTracker.
+        Raises ValueError if the rule already exists."""
         if rule in self.rules:
             raise ValueError("Rule already exists")
         self.rules.append(rule)
         self.logger.debug(f"Added rule {rule}")
 
     def delete_rule(self, rule: Rule) -> None:
+        """Deletes a rule from the ExpenseTracker.
+        Raises ValueError if the rule does not exist."""
         self.rules.remove(rule)
         self.logger.debug(f"Deleted rule {rule}")
 
-    def get_transactions_for_account(self, account_name: str) -> list[Transaction]:
-        if account_name and not self.accounts.get(account_name):
-            raise ValueError(f"Account {account_name} does not exist")
-        return list(self.accounts[account_name].transactions.values())
+    def get_transactions_in_accounts(
+        self, account_names: list[str]
+    ) -> list[Transaction]:
+        """Returns a list of all transactions in the given accounts.
+        Raises ValueError if any of the accounts do not exist."""
+        for account_name in account_names:
+            if not self.accounts.get(account_name):
+                raise ValueError(f"Account {account_name} does not exist")
+        return [
+            transaction
+            for account_name in account_names
+            for transaction in self.accounts[account_name].transactions.values()
+        ]
+
+    def get_grouped_expenses(
+        self,
+        group_by: GroupBy = GroupBy.NONE,
+        period: GroupingPeriod = GroupingPeriod.NONE,
+        accounts: list[str] = None,
+    ) -> pd.DataFrame:
+        """Returns a DataFrame with the expenses grouped by the given categorization method and period.
+
+        DataFrame columns contain only a subset of the Transaction fields:
+        - date
+        - amount
+        - category
+        - account
+
+        IMPORTANT ⚠️
+        - Amount in expenses is normalized to the default currency.
+        - Excludes expenses categorized as "Transfer".
+        """
+        time_offset = GROUPING_PERIOD_TO_PANDAS[period]
+        transactions = (
+            self.get_transactions_in_accounts(accounts)
+            if accounts
+            else self.transactions
+        )
+        group_cols = [pd.Grouper(key="date", freq=time_offset)]
+        if group_by != GroupBy.NONE:
+            group_cols.append(group_by.value.lower())
+        return (
+            pd.DataFrame(
+                [
+                    {
+                        "date": pd.to_datetime(transaction.date),
+                        "amount": CurrencyConverter.convert(
+                            transaction.debit,
+                            transaction.currency,
+                            self.config.default_currency,
+                        ),
+                        "category": transaction.category,
+                        "account": transaction.account,
+                    }
+                    for transaction in transactions
+                    if transaction.debit > 0 and transaction.category != "Transfer"
+                ]
+            )
+            .groupby(group_cols)
+            .sum()
+            .reset_index()
+        )
 
     def get_entries_for_transaction_field(self, field: str) -> list:
         """For the given transaction field, return all distinct values in the ExpenseTracker's transactions.
@@ -77,15 +158,15 @@ class ExpenseTracker:
 
         if field not in Transaction.data_model():
             raise ValueError(f"Field {field} does not exist")
-        return list(
-            set(getattr(transaction, field) for transaction in self.transactions)
-        )
+        return list({getattr(transaction, field) for transaction in self.transactions})
 
     def categorize_transactions(self) -> None:
+        """Categorizes all transactions in the ExpenseTracker by applying existing rules."""
         for transaction in self.transactions:
             transaction.categorize(self.rules)
 
     def as_dict(self) -> dict:
+        """Returns a dictionary representation of the ExpenseTracker."""
         return {
             "accounts": [account.as_dict() for account in self.accounts.values()],
             "rules": [rule.as_dict() for rule in self.rules],
@@ -99,22 +180,19 @@ class ExpenseTracker:
 
     @classmethod
     def from_dict(cls, expense_tracker_dict: dict) -> "ExpenseTracker":
+        """Returns an ExpenseTracker from a dictionary representation."""
         expense_tracker = cls()
-        config = expense_tracker_dict.get("config")
-        if config:
+        if config := expense_tracker_dict.get("config"):
             expense_tracker.config = ExpenseTrackerConfig(**config)
-        accounts = expense_tracker_dict.get("accounts")
-        if accounts:
+        if accounts := expense_tracker_dict.get("accounts"):
             for account_dict in accounts:
                 account = Account.from_dict(account_dict)
                 expense_tracker.add_account(account)
-        rules = expense_tracker_dict.get("rules")
-        if rules:
+        if rules := expense_tracker_dict.get("rules"):
             for rule_dict in rules:
                 rule = Rule.from_dict(rule_dict)
                 expense_tracker.add_rule(rule)
-        transactions = expense_tracker_dict.get("transactions")
-        if transactions:
+        if transactions := expense_tracker_dict.get("transactions"):
             for transaction_dict in transactions:
                 transaction = Transaction.from_dict(transaction_dict)
                 expense_tracker.accounts[transaction.account].add_transaction(

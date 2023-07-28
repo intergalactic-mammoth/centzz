@@ -7,6 +7,8 @@ from Rule import RuleRelation, Rule, RuleCondition
 @attr.s(auto_attribs=True)
 class Transaction:
     """
+    Represents a transaction.
+
     Debit and credit are always positive.
     """
 
@@ -24,6 +26,7 @@ class Transaction:
 
     @staticmethod
     def data_model():
+        """Returns the data model for a transaction."""
         return {
             "transaction_id": str,
             "date": str,
@@ -39,6 +42,7 @@ class Transaction:
         }
 
     def _condition_applies(self, condition: RuleCondition) -> bool:
+        """Returns True if the condition applies to the transaction, False otherwise."""
         field = condition.field
         relation = condition.relation
         values = condition.values
@@ -53,11 +57,13 @@ class Transaction:
         raise ValueError(f"Unknown relation {relation}")
 
     def _rule_applies(self, rule: Rule) -> bool:
+        """Returns True if the rule applies to the transaction, False otherwise."""
         return all(self._condition_applies(condition) for condition in rule.conditions)
 
     # TODO: I need to figure out a deterministic way of applying
     # rule precedence, and how to handle rule collisions.
     def categorize(self, rules: list[Rule]) -> None:
+        """Categorizes the transaction by applying the given rules."""
         matched = False
         for rule in rules:
             if self._rule_applies(rule):
@@ -76,6 +82,7 @@ class Transaction:
             self.category = "Other"
 
     def as_dict(self) -> dict:
+        """Returns a dictionary representation of the transaction."""
         return {
             "transaction_id": self.transaction_id,
             "date": self.date,
@@ -92,6 +99,7 @@ class Transaction:
 
     @classmethod
     def from_dict(cls, transaction_dict: dict) -> "Transaction":
+        """Returns a transaction from a dictionary representation."""
         return cls(
             transaction_id=transaction_dict["transaction_id"],
             date=transaction_dict["date"],

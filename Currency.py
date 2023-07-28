@@ -2,12 +2,16 @@ import enum
 
 
 class Currency(enum.StrEnum):
+    """A currency."""
+
     CHF = "CHF"
     EUR = "EUR"
     USD = "USD"
 
 
 class CurrencyConverter:
+    """A currency converter."""
+
     # TODO:
     # - Get the real rates
     # - Get the rates from a service
@@ -33,4 +37,5 @@ class CurrencyConverter:
     def convert(
         cls, amount: float, from_currency: Currency, to_currency: Currency
     ) -> float:
+        """Converts the given amount from the given currency to the given currency."""
         return amount * cls.RATES[from_currency][to_currency]
