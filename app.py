@@ -18,6 +18,15 @@ from Rule import Rule, RuleRelation, RuleAction, RuleCondition
 BASE_LOGGER = logging.getLogger(__name__)
 
 
+def remove_streamlit_footer():
+    """Sets footer style to hidden to hide Streamlit footer."""
+    hide_footer_style = """
+    <style>
+    footer {visibility: hidden;}
+    """
+    st.markdown(hide_footer_style, unsafe_allow_html=True)
+
+
 class ExpenseTrackerApp:
     def __init__(self, config_path: str, data_path: str):
         self.logger = logging.getLogger(__name__)
@@ -34,7 +43,7 @@ class ExpenseTrackerApp:
             page_icon="💸",
         )
 
-        self._remove_streamlit_footer()
+        remove_streamlit_footer()
         self.logger.info("Removed Streamlit footer")
 
         try:
@@ -49,14 +58,6 @@ class ExpenseTrackerApp:
             len(self.expense_tracker.rules),
             len(self.expense_tracker.transactions),
         )
-
-    def _remove_streamlit_footer(self):
-        """Sets footer style to hidden to hide Streamlit footer."""
-        hide_footer_style = """
-        <style>
-        footer {visibility: hidden;}
-        """
-        st.markdown(hide_footer_style, unsafe_allow_html=True)
 
     def save_expense_tracker_to_session_state(self):
         st.session_state["expense_tracker"] = self.expense_tracker
@@ -273,11 +274,16 @@ class ExpenseTrackerApp:
 
         with st.expander("Add transactions from CSV"):
             if csv_file := st.file_uploader(
-                "Choose a CSV file", type="csv", key="current_file"
+                "Choose a CSV file",
+                type="csv",
+                key="current_file",
             ):
                 # Parse headers of CSV file to map them to transaction columns
                 st.write("Choose the correct column for each transaction field:")
-                df = pd.read_csv(csv_file)
+                try:
+                    df = pd.read_csv(csv_file)
+                except FileNotFoundError as e:
+                    raise FileNotFoundError(f"Error while loading CSV file: {e}")
                 transaction_id_header = st.selectbox("Transaction ID", df.columns)
                 date_header = st.selectbox("Date", df.columns)
                 payee_header = st.selectbox("Payee", df.columns)

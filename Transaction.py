@@ -45,13 +45,12 @@ class Transaction:
 
         if relation == RuleRelation.CONTAINS.value:
             return any(value in getattr(self, field) for value in values)
-        elif relation == RuleRelation.EQUALS.value:
+        if relation == RuleRelation.EQUALS.value:
             assert len(values) == 1
             return getattr(self, field) == values[0]
-        elif relation == RuleRelation.ONE_OF.value:
+        if relation == RuleRelation.ONE_OF.value:
             return getattr(self, field) in values
-        else:
-            raise ValueError(f"Unknown relation {relation}")
+        raise ValueError(f"Unknown relation {relation}")
 
     def _rule_applies(self, rule: Rule) -> bool:
         return all(self._condition_applies(condition) for condition in rule.conditions)
