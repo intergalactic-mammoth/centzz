@@ -5,8 +5,7 @@
 		<b>Your dead-simple personal finances app</b>
 	</p>
 	<br>
-	<br>
-	<br>
+    <br>
 </div>
 
 centzz is a simple app to manage your personal finances.
