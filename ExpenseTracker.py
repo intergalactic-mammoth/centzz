@@ -151,7 +151,7 @@ class ExpenseTracker:
                 ]
             )
             .groupby(group_cols)
-            .sum()
+            .sum(numeric_only=True)
             .reset_index()
         )
 
@@ -173,6 +173,22 @@ class ExpenseTracker:
         """Categorizes all transactions in the ExpenseTracker by applying existing rules."""
         for transaction in self.transactions:
             transaction.categorize(self.rules)
+
+    def extend(self, other: "ExpenseTracker") -> None:
+        """Extends the ExpenseTracker with the given ExpenseTracker.
+        Raises ValueError if any of the accounts, rules, or transactions already exist.
+        """
+        for account in other.accounts.values():
+            self.add_account(account)
+        for rule in other.rules:
+            self.add_rule(rule)
+        try:
+            for transaction in other.transactions:
+                self.accounts[transaction.account].add_transaction(transaction)
+        except KeyError as e:
+            raise ValueError(
+                f"Account {transaction.account} does not exist: {e}"
+            ) from e
 
     def as_dict(self) -> dict:
         """Returns a dictionary representation of the ExpenseTracker."""

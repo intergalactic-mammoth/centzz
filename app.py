@@ -30,6 +30,12 @@ def remove_streamlit_footer():
 
 
 class ExpenseTrackerApp:
+    """
+    Represents the main app.
+
+    It is responsible for creating the UI and handling user input.
+    """
+
     def __init__(self, config_path: str):
         self.logger = logging.getLogger(__name__)
 
@@ -41,9 +47,22 @@ class ExpenseTrackerApp:
 
         self.logger.info("Loaded app config: %s", self.app_config)
 
+        # Set page config. This must be done before calling any other Streamlit code.
         st.set_page_config(
             page_title="centzz",
             page_icon="💸",
+            menu_items={
+                "Report a bug": f"{self.app_config['github_url']}/issues/new",
+                "About": """
+
+                This app is built with ❤️ by [aristot](https://aristot.io).
+
+                Did the world really need yet another expenses tracking app? Maybe, maybe not.
+                I just couldn't find one that was did what I needed.
+
+                You can find the code on [GitHub](${self.app_config['github_url']}).
+                """,
+            },
         )
 
         remove_streamlit_footer()
@@ -56,7 +75,7 @@ class ExpenseTrackerApp:
             self.logger.info("Loaded ExpenseTracker from session state.")
         except KeyError as e:
             self.logger.info(
-                "No ExpenseTracker found in session state. Creating new one."
+                f"No ExpenseTracker found in session state: {e}. Creating new one."
             )
             self.expense_tracker = ExpenseTracker()
 
@@ -118,8 +137,9 @@ class ExpenseTrackerApp:
                 How to get your transactions as a CSV file depends on your bank.
                 Here are pointers for some banks to get you started:
 
-                - [UBS](#TODO)
-                - [N26](#TODO)
+                - [UBS](https://help.revolut.com/en-US/help/profile-and-plan/managing-my-account/viewing-my-account-statements/)
+                - [Twint](https://www.twint.ch/en/faq/how-do-i-download-an-overview-of-my-revenues-and-charges/)
+                - [N26](https://support.n26.com/en-eu/payments-transfers-and-withdrawals/balance-and-limits/how-to-get-bank-statement-n26)
                 - [Revolut](#TODO)
 
                 #### 3. Add rules
@@ -146,34 +166,43 @@ class ExpenseTrackerApp:
                 """
             )
             st.warning(
-                "Don't forget to come back here to **download your data** "
+                "Don't forget to come back to this page to **download your data** "
                 "when you are done managing your accounts! Since 💸 **centzz** "
-                "is a browser app, **all data will be lost** if you close the tab.",
+                "is a browser app, **all data will be lost** if you close or reload the tab.",
                 icon="⚠️",
             )
         with st.expander("Load data"):
-            if data_file := st.file_uploader(
-                label="Load your 💸 ***centzz*** data",
+            data_file = st.file_uploader(
+                label="If you have previously exported your data, you can load it here:",
                 type="json",
                 key="load_data",
-                label_visibility="collapsed",
-            ):
+            )
+            if st.button("Load data 🚀") and data_file:
                 try:
                     data = json.loads(data_file.read().decode("utf-8"))
-                    self.expense_tracker = ExpenseTracker.from_dict(data)
-                    self.logger.info("Loaded ExpenseTracker from JSON file.")
                 except FileNotFoundError as e:
                     raise FileNotFoundError(
-                        f"Error while loading ExpenseTracker data: {e}"
+                        f"Error while loading JSON data: {e}"
                     ) from e
+                try:
+                    self.expense_tracker.extend(ExpenseTracker.from_dict(data))
+                except KeyError as e:
+                    raise KeyError(
+                        f"Error while updating ExpenseTracker data: {e}"
+                    ) from e
+                self.logger.info("Loaded ExpenseTracker from JSON file.")
                 self.expense_tracker.log_state()
                 self.save()
                 st.success(
                     "Data loaded successfully! Go to the other tabs and have fun."
                 )
         with st.expander("Save data"):
+            st.caption(
+                "Export your data as a JSON file, to load it again next time you use the app.",
+                help="The app runs on your browser, so all data will be lost if you close the tab. Exporing them allows you to restore your data next time you use the app.",
+            )
             if st.download_button(
-                "Download your data 📎",
+                "Download data 📎",
                 data=self.expense_tracker.as_json(),
                 file_name="centzz_data.json",
                 mime="application/json",
@@ -336,6 +365,7 @@ class ExpenseTrackerApp:
 
             if st.button("Add transaction"):
                 transaction = Transaction(
+                    transaction_id=str(uuid.uuid4()),
                     date=date.isoformat(),
                     payee=payee,
                     description=description,
@@ -531,17 +561,17 @@ class ExpenseTrackerApp:
         """Displays a form to add a new account to ExpenseTracker."""
 
         with st.expander("Add new account"):
-            account_input = {
-                "name": st.text_input("Account name"),
-                "currency": st.selectbox("Currency", ["CHF", "EUR", "USD"]),
-                # TODO: I'm pretty sure I'm ignoring this. I should update the code to use this.
-                "starting_balance": st.number_input("Initial balance"),
-            }
+            account_name = st.text_input("Account name")
+            account_currency = st.selectbox("Currency", ["CHF", "EUR", "USD"])
+            account_initial_balance = st.number_input("Initial balance")
 
-            account_input["currency"] = Currency(account_input["currency"])
-            # Initialize balance with starting balance
-            account_input["balance"] = account_input["starting_balance"]
-            account = Account.from_dict(account_input)
+            account = Account.from_dict(
+                {
+                    "name": account_name,
+                    "currency": Currency(account_currency),
+                    "starting_balance": account_initial_balance,
+                }
+            )
 
             if not account.is_valid():
                 st.error("Account name must be filled in.")
@@ -549,19 +579,19 @@ class ExpenseTrackerApp:
             if st.button("Create account"):
                 try:
                     self.expense_tracker.add_account(account)
+                    st.success(f"Account {account.name} created.")
+                    self.save_and_reload()
                 except ValueError as e:
                     st.error(f"Error adding account: {e}")
                     return
-                st.success(f"Account {account.name} created.")
-                self.save_and_reload()
 
     def save(self):
-        """Saves ExpenseTracker to session state, to disk. Doesn't reload."""
+        """Saves ExpenseTracker to session state. Doesn't reload."""
         self.logger.info("Saving ExpenseTrackerApp...")
         self.save_expense_tracker_to_session_state()
 
     def save_and_reload(self):
-        """Saves ExpenseTracker to session state, to disk, and reloads the page."""
+        """Saves ExpenseTracker to session state, and reloads the page."""
         self.save()
         st.experimental_rerun()
 
@@ -738,7 +768,7 @@ def delete_rule_callback(app: ExpenseTrackerApp, rule: Rule):
 
 def main():
     logging.basicConfig(
-        format="%(levelname)s %(asctime)s - %(name)s: %(message)s",
+        format="%(levelname)s :: %(asctime)s :: %(filename)s l.%(lineno)d :: %(message)s",
         level=logging.DEBUG,
     )
     app = ExpenseTrackerApp(config_path="config.json")
