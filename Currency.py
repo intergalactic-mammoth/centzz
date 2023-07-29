@@ -1,4 +1,7 @@
 import enum
+import functools
+
+from forex_python.converter import CurrencyRates
 
 
 class Currency(enum.StrEnum):
@@ -12,30 +15,18 @@ class Currency(enum.StrEnum):
 class CurrencyConverter:
     """A currency converter."""
 
-    # TODO:
-    # - Get the real rates
-    # - Get the rates from a service
-    RATES = {
-        Currency.CHF: {
-            Currency.CHF: 1.0,
-            Currency.EUR: 0.92,
-            Currency.USD: 1.08,
-        },
-        Currency.EUR: {
-            Currency.CHF: 1.08,
-            Currency.EUR: 1.0,
-            Currency.USD: 1.18,
-        },
-        Currency.USD: {
-            Currency.CHF: 0.92,
-            Currency.EUR: 0.85,
-            Currency.USD: 1.0,
-        },
-    }
+    c = CurrencyRates()
+
+    # Cache the rates to avoid unnecessary API calls.
+    @classmethod
+    @functools.cache
+    def get_rate(cls, from_currency: Currency, to_currency: Currency) -> float:
+        """Returns the rate from the given currency to the given currency."""
+        return cls.c.get_rate(from_currency, to_currency)
 
     @classmethod
     def convert(
         cls, amount: float, from_currency: Currency, to_currency: Currency
     ) -> float:
         """Converts the given amount from the given currency to the given currency."""
-        return amount * cls.RATES[from_currency][to_currency]
+        return amount * cls.get_rate(from_currency, to_currency)
