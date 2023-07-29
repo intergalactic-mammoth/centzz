@@ -2,6 +2,7 @@ import logging
 import traceback
 import uuid
 import time
+import json
 
 import pandas as pd
 import streamlit as st
@@ -30,7 +31,7 @@ def remove_streamlit_footer():
 
 
 class ExpenseTrackerApp:
-    def __init__(self, config_path: str, data_path: str):
+    def __init__(self, config_path: str):
         self.logger = logging.getLogger(__name__)
 
         try:
@@ -50,21 +51,19 @@ class ExpenseTrackerApp:
 
         try:
             self.expense_tracker = ExpenseTracker.from_dict(
-                io_utils.try_load_json_to_dict(data_path)
+                st.session_state["expense_tracker"]
             )
-        except FileNotFoundError as e:
-            raise FileNotFoundError(
-                f"Error while loading ExpenseTracker data: {e}"
-            ) from e
-        self.logger.info(
-            "Loaded ExpenseTracker! Loaded %s accounts, %s rules, and %s transactions.",
-            len(self.expense_tracker.accounts),
-            len(self.expense_tracker.rules),
-            len(self.expense_tracker.transactions),
-        )
+            self.logger.info("Loaded ExpenseTracker from session state.")
+        except KeyError as e:
+            self.logger.info(
+                "No ExpenseTracker found in session state. Creating new one."
+            )
+            self.expense_tracker = ExpenseTracker()
+
+        self.expense_tracker.log_state()
 
     def save_expense_tracker_to_session_state(self):
-        st.session_state["expense_tracker"] = self.expense_tracker
+        st.session_state["expense_tracker"] = self.expense_tracker.as_dict()
 
     def run(self):
         """Runs the app. Creates all streamlit components."""
@@ -72,26 +71,125 @@ class ExpenseTrackerApp:
         st.caption("Your dead-simple personal finances app")
 
         (
+            start_tab,
             overview_tab,
             accounts_tab,
-            graphs_tab,
             transactions_tab,
+            analytics_tab,
             rules_tab,
-        ) = st.tabs(["Overview", "Accounts", "Graphs", "Transactions", "Rules"])
+        ) = st.tabs(
+            ["Start", "Overview", "Accounts", "Transactions", "Analytics", "Rules"]
+        )
+
+        with start_tab:
+            self.display_start_tab()
+
         with overview_tab:
             self.display_overview_tab()
 
         with accounts_tab:
             self.display_accounts_tab()
 
-        with graphs_tab:
-            self.display_graphs_tab()
-
         with transactions_tab:
             self.display_transactions_tab()
 
+        with analytics_tab:
+            self.display_analytics_tab()
+
         with rules_tab:
             self.display_rules_tab()
+
+    def display_start_tab(self):
+        st.header("Welcome to 💸 **centzz!**")
+        st.write("Read the instructions below to get started.")
+        with st.expander("Read me ⚠️"):
+            st.markdown(
+                """
+                #### 1. Add accounts
+                First, you need to add your accounts.
+                You can add as many accounts as you want.
+
+                #### 2. Add transactions
+                Once you have added your accounts,
+                you can add transactions to them.
+                You can add transactions manually,
+                or import them from a CSV file.
+
+                How to get your transactions as a CSV file depends on your bank.
+                Here are pointers for some banks to get you started:
+
+                - [UBS](#TODO)
+                - [N26](#TODO)
+                - [Revolut](#TODO)
+
+                #### 3. Add rules
+                Once you have added transactions,
+                you can add rules to categorize them.
+                💸 **centzz** provides you with a powerful rule engine
+                to categorize your transactions automatically.
+
+                #### 4. Enjoy the analytics
+                Once you have added transactions and rules,
+                you can enjoy the analytics.
+                💸 **centzz** has an intuitive analytics engine
+                to visualize your finances.
+
+                #### 5. Save your data
+                💸 **centzz** is a browser app, which means that all
+                your data is stored in your browser.
+                This means that if you close the tab,
+                or if you don't use the app for a while,
+                all your data will be lost.
+
+                To save your data, you can download it as a JSON file.
+                You can then load this file again to continue working on your data.
+                """
+            )
+            st.warning(
+                "Don't forget to come back here to **download your data** "
+                "when you are done managing your accounts! Since 💸 **centzz** "
+                "is a browser app, **all data will be lost** if you close the tab.",
+                icon="⚠️",
+            )
+        with st.expander("Load data"):
+            if data_file := st.file_uploader(
+                label="Load your 💸 ***centzz*** data",
+                type="json",
+                key="load_data",
+                label_visibility="collapsed",
+            ):
+                try:
+                    data = json.loads(data_file.read().decode("utf-8"))
+                    self.expense_tracker = ExpenseTracker.from_dict(data)
+                    self.logger.info("Loaded ExpenseTracker from JSON file.")
+                except FileNotFoundError as e:
+                    raise FileNotFoundError(
+                        f"Error while loading ExpenseTracker data: {e}"
+                    ) from e
+                self.expense_tracker.log_state()
+                self.save()
+                st.success(
+                    "Data loaded successfully! Go to the other tabs and have fun."
+                )
+        with st.expander("Save data"):
+            if st.download_button(
+                "Download your data 📎",
+                data=self.expense_tracker.as_json(),
+                file_name="centzz_data.json",
+                mime="application/json",
+            ):
+                self.logger.info("Downloading ExpenseTracker data...")
+                st.success("Data saved successfully!")
+        st.divider()
+        st.caption(
+            f"💸 **centzz** is built with ❤️ by [aristot](https://aristot.io), "
+            "using [Streamlit](https://streamlit.io)."
+            "\n\nYou can find the code on [GitHub](${self.app_config['github_url']}). "
+            "For questions, feedback, or feature requests, "
+            f"open an [issue](${self.app_config['github_url']}/issues/new) on GitHub. "
+            "\n\nIf you want to support the development of this app, "
+            "you can [buy me a coffee ☕️](#TODO) or support me on [Patreon](#TODO)."
+        )
 
     def display_overview_tab(self):
         st.metric(
@@ -128,10 +226,10 @@ class ExpenseTrackerApp:
         self.display_add_new_account()
         self.display_delete_account()
 
-    def display_graphs_tab(self):
-        # TODO: Make graphs modular to reuse also in overview tab
-        # TODO: Add donut chart (altair) :)
-        st.header("📈 Graphs")
+    def display_analytics_tab(self):
+        # TODO: Make analytics modular to reuse also in overview tab
+        # TODO: Add donut chart (with Altair) :)
+        st.header("📈 Analytics")
         if not self.expense_tracker.accounts:
             st.write("No accounts found... Please add an account first.")
 
@@ -211,7 +309,49 @@ class ExpenseTrackerApp:
 
         if not self.expense_tracker.accounts:
             st.write("No accounts found... Please add an account first.")
+            return
 
+        # TODO: Either do this, or provide editable df UI? Also, modularize.
+        with st.expander("Add single transaction"):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                date = st.date_input("Date")
+            with col2:
+                account = st.selectbox("Account", self.expense_tracker.accounts.keys())
+            with col3:
+                currency = st.selectbox(
+                    "Currency (auto selected)",
+                    list(Currency),
+                    index=list(Currency).index(
+                        self.expense_tracker.accounts[account].currency
+                    ),
+                    disabled=True,
+                    key="single_currency_selectbox",
+                )
+            payee = st.text_input("Payee")
+            description = st.text_input("Description")
+            debit_or_credit = st.selectbox("Debit/Credit", ["Debit", "Credit"])
+            amount = st.number_input("Amount")
+            category = st.text_input("Category")
+
+            if st.button("Add transaction"):
+                transaction = Transaction(
+                    date=date.isoformat(),
+                    payee=payee,
+                    description=description,
+                    debit=amount if debit_or_credit == "Debit" else 0.0,
+                    credit=amount if debit_or_credit == "Credit" else 0.0,
+                    account=account,
+                    currency=Currency(currency),
+                    category=category,
+                )
+                try:
+                    self.expense_tracker.accounts[account].add_transaction(transaction)
+                except ValueError as e:
+                    st.error(f"Error adding transaction: {e}")
+                    return
+                st.success(f"Transaction added: {transaction}")
+                self.save_and_reload()
         with st.expander("Add transactions from CSV"):
             if csv_file := st.file_uploader(
                 "Choose a CSV file",
@@ -248,6 +388,7 @@ class ExpenseTrackerApp:
                         account.name
                         for account in self.expense_tracker.accounts.values()
                     ],
+                    key="add_transactions_from_csv_account_selectbox",
                 )
 
                 overwrite = st.checkbox("Overwrite existing transactions")
@@ -303,14 +444,13 @@ class ExpenseTrackerApp:
                             new_transactions, overwrite_if_exists=overwrite
                         )
                         with st.spinner(
-                            f"Adding {len(new_transactions)} transactions... {num_duplicates} duplicates will {'' if overwrite else 'not '}be overwritten."
+                            f"Adding {len(new_transactions)} transactions, found {num_duplicates} duplicates."
+                            f"{' Overwriting...' if overwrite else ' Skipping duplicates...'}"
                         ):
                             # TODO: This is horrendous, find a better way to display the message :')
                             # The problem with toast is that I can't access the variables in the callback
                             time.sleep(2.5)
-                        self.save_expense_tracker_to_session_state()
-                        io_utils.write_expense_tracker(self.expense_tracker)
-                        st.experimental_rerun()
+                        self.save_and_reload()
                     except Exception as e:
                         st.error(
                             f"Error reading CSV file: {e}.\nDetailed error:\n{traceback.format_exc()}"
@@ -325,7 +465,7 @@ class ExpenseTrackerApp:
             self.display_delete_all_transactions()
 
     def display_rules_tab(self):
-        st.header("📝 Rules")
+        st.header("🧮 Rules")
 
         if not self.expense_tracker.rules:
             st.write("No rules yet...")
@@ -413,9 +553,17 @@ class ExpenseTrackerApp:
                     st.error(f"Error adding account: {e}")
                     return
                 st.success(f"Account {account.name} created.")
-                self.save_expense_tracker_to_session_state()
-                io_utils.write_expense_tracker(self.expense_tracker)
-                st.experimental_rerun()
+                self.save_and_reload()
+
+    def save(self):
+        """Saves ExpenseTracker to session state, to disk. Doesn't reload."""
+        self.logger.info("Saving ExpenseTrackerApp...")
+        self.save_expense_tracker_to_session_state()
+
+    def save_and_reload(self):
+        """Saves ExpenseTracker to session state, to disk, and reloads the page."""
+        self.save()
+        st.experimental_rerun()
 
     def display_delete_account(self):
         """Displays a form to delete an account from ExpenseTracker."""
@@ -489,12 +637,11 @@ class ExpenseTrackerApp:
             st.warning(
                 "This will delete all transactions. Action cannot be undone.", icon="⚠️"
             )
-        if col2.button("Delete") and delete_all:
+        if col2.button("Delete", disabled=not delete_all):
             for account in self.expense_tracker.accounts.values():
                 account.transactions = {}
             st.success("All transactions deleted.")
-            io_utils.write_expense_tracker(self.expense_tracker)
-            st.experimental_rerun()
+            self.save_and_reload()
 
     def display_add_new_rule(self):
         transactions = self.expense_tracker.transactions
@@ -555,8 +702,7 @@ class ExpenseTrackerApp:
                 return
             self.expense_tracker.categorize_transactions()
             st.success(f"Rule added: {rule}")
-            io_utils.write_expense_tracker(self.expense_tracker)
-            st.experimental_rerun()
+            self.save_and_reload()
 
     def display_delete_rule(self):
         for rule in self.expense_tracker.rules:
@@ -575,7 +721,7 @@ class ExpenseTrackerApp:
                 use_container_width=True,
                 on_click=delete_rule_callback,
                 args=(
-                    self.expense_tracker,
+                    self,
                     rule,
                 ),
             ):
@@ -584,10 +730,10 @@ class ExpenseTrackerApp:
 
 # I have no idea why, but having this code as a callback works.
 # The same code in the display_delete_rule function, it won't work.
-def delete_rule_callback(expense_tracker, rule: Rule):
-    expense_tracker.delete_rule(rule)
-    expense_tracker.categorize_transactions()
-    io_utils.write_expense_tracker(expense_tracker)
+def delete_rule_callback(app: ExpenseTrackerApp, rule: Rule):
+    app.expense_tracker.delete_rule(rule)
+    app.expense_tracker.categorize_transactions()
+    app.save()
     st.toast("Rule deleted.")
 
 
@@ -596,7 +742,7 @@ def main():
         format="%(levelname)s %(asctime)s - %(name)s: %(message)s",
         level=logging.DEBUG,
     )
-    app = ExpenseTrackerApp(config_path="config.json", data_path="_data/data.json")
+    app = ExpenseTrackerApp(config_path="config.json")
     app.run()
 
 

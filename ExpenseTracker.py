@@ -1,5 +1,6 @@
 import attr
 import logging
+import json
 
 import pandas as pd
 
@@ -49,6 +50,14 @@ class ExpenseTracker:
             for account in self.accounts.values()
             for transaction in account.transactions.values()
         ]
+
+    def log_state(self) -> None:
+        """Logs a summary of the ExpenseTracker."""
+        self.logger.info(f"Balance: {self.balance} {self.config.default_currency}")
+        self.logger.info(
+            f"Holding {len(self.accounts)} accounts, {len(self.rules)} rules, "
+            f"{len(self.transactions)} transactions."
+        )
 
     def add_account(self, account: Account) -> None:
         """Adds an account to the ExpenseTracker.
@@ -177,6 +186,10 @@ class ExpenseTracker:
             ],
             "config": attr.asdict(self.config),
         }
+
+    def as_json(self) -> str:
+        """Returns a JSON representation of the ExpenseTracker."""
+        return json.dumps(self.as_dict(), indent=4)
 
     @classmethod
     def from_dict(cls, expense_tracker_dict: dict) -> "ExpenseTracker":

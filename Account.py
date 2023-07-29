@@ -62,10 +62,10 @@ class Account:
             for transaction in transactions
         )
         self.logger.info(
-            "Added %s transactions. %s duplicates were %s overwritten.",
+            "Added %s transactions, found %s duplicates.%s.",
             len(transactions),
             num_duplicate_transactions,
-            "" if overwrite_if_exists else "not",
+            " Overwriting..." if overwrite_if_exists else " Skipping duplicates...",
         )
         return num_duplicate_transactions
 
