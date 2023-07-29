@@ -42,7 +42,7 @@ class ExpenseTrackerApp:
         self.logger.info("Loaded app config: %s", self.app_config)
 
         st.set_page_config(
-            page_title=self.app_config["application_name"],
+            page_title="centzz",
             page_icon="💸",
         )
 
