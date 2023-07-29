@@ -1,10 +1,46 @@
 An app.
 
+<div align="center">
+	<h1>💸</h1>
+	<h1>centzz</h1>
+	<p>
+		<b>Your dead-simple personal finances app</b>
+	</p>
+	<br>
+	<br>
+	<br>
+</div>
 
+This is a simple app to manage your personal finances.
+
+You can have multiple accounts, add transactions manually or with a CSV file, and use 💸 **centzz**'s powerful rule engine to automatically categorize your transactions.
+
+## Features
+
+- Unlimited accounts
+- Unlimited transactions
+- Import transactions from CSV file
+- Powerful rule engine to automatically categorize transactions
+- Intuitive analytics engine to visualize your finances
+- Export your data to JSON
+
+## Built with
+
+- [Streamlit](https://streamlit.io/) - Simple python framework to build data apps
+- [Pandas](https://pandas.pydata.org/) - Data analysis library
+
+## License
+
+Distributed under the MIT License. See [`LICENSE`](./LICENSE) for more information.
+
+---
+
+## Roadmap (for me to remember)
+
+- [ ] Add UUID to manual transactions...!
+- [ ] Add export transactions to CSV.
 - [ ] Make dataframe sexy by using [column configuration](https://docs.streamlit.io/library/api-reference/data/st.column_config)
 - [ ] Use [metrics](https://docs.streamlit.io/library/api-reference/data/st.column_config) for displaying key information about user's finances?
-- [ ] Read header of csv file and ask user to map input columns to data model
-- [ ] Make it possible to add transactions manually (how to deal with UID?)
-- [ ] Make it possible to delete transactions? Look for "dynamic" setting [here](https://docs.streamlit.io/library/api-reference/data/st.data_editor)
-- [ ] Read [Dataframes](https://docs.streamlit.io/library/advanced-features/dataframes) documentation, it reveals a lot of things.
-- [ ] Understand [button behavior](https://docs.streamlit.io/library/advanced-features/button-behavior-and-examples)
+- [ ] Make it possible to delete specific transactions? Look for "dynamic" setting [here](https://docs.streamlit.io/library/api-reference/data/st.data_editor)
+
+- [x] Read header of csv file and ask user to map input columns to data model
