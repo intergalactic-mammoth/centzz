@@ -178,10 +178,16 @@ class ExpenseTracker:
         """Extends the ExpenseTracker with the given ExpenseTracker.
         Raises ValueError if any of the accounts, rules, or transactions already exist.
         """
-        for account in other.accounts.values():
-            self.add_account(account)
-        for rule in other.rules:
-            self.add_rule(rule)
+        try:
+            for account in other.accounts.values():
+                self.add_account(account)
+        except ValueError as e:
+            raise ValueError(f"Account {account.name} already exists: {e}") from e
+        try:
+            for rule in other.rules:
+                self.add_rule(rule)
+        except ValueError as e:
+            raise ValueError(f"Rule {rule} already exists: {e}") from e
         try:
             for transaction in other.transactions:
                 self.accounts[transaction.account].add_transaction(transaction)
