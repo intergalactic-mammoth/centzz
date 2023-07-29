@@ -5,4 +5,4 @@ seaborn==0.11.2
 streamlit==1.25.0
 schwifty==2023.6.0
 attrs==21.4.0
-forex-python=1.8
+forex-python==1.8
