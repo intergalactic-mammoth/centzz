@@ -7,7 +7,6 @@ import json
 import pandas as pd
 import streamlit as st
 
-import io_utils
 import plotting
 
 from analytics_utils import GroupingPeriod, GroupBy, filter_transactions_by_dates
@@ -35,7 +34,8 @@ class ExpenseTrackerApp:
         self.logger = logging.getLogger(__name__)
 
         try:
-            self.app_config = io_utils.try_load_json_to_dict(config_path)
+            with open(config_path, "r") as f:
+                self.app_config = json.load(f)
         except FileNotFoundError as e:
             raise FileNotFoundError(f"Error while loading config: {e}") from e
 
@@ -575,8 +575,7 @@ class ExpenseTrackerApp:
             if st.button("Delete account"):
                 del self.expense_tracker.accounts[account_to_delete]
                 st.success(f"Account {account_to_delete} deleted.")
-                io_utils.write_expense_tracker(self.expense_tracker)
-                st.experimental_rerun()
+                self.save_and_reload()
 
     def display_transactions(self) -> None:
         transactions = sorted(
