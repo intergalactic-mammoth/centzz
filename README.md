@@ -8,7 +8,7 @@
 	<br>
 </div>
 
-This is a simple app to manage your personal finances.
+centzz is a simple app to manage your personal finances.
 
 You can have multiple accounts, add transactions manually or with a CSV file, and use 💸 **centzz**'s powerful rule engine to automatically categorize your transactions.
 
