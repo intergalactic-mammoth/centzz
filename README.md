@@ -1,8 +1,5 @@
-An app.
-
 <div align="center">
-	<h1>💸</h1>
-	<h1>centzz</h1>
+	<h1>💸 centzz</h1>
 	<p>
 		<b>Your dead-simple personal finances app</b>
 	</p>
