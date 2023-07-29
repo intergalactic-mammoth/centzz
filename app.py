@@ -50,7 +50,7 @@ class ExpenseTrackerApp:
         # Set page config. This must be done before calling any other Streamlit code.
         st.set_page_config(
             page_title="centzz",
-            page_icon="💸",
+            page_icon="./static/centzz-icon-no-bg.png",
             menu_items={
                 "Report a bug": f"{self.app_config['github_url']}/issues/new",
                 "About": """

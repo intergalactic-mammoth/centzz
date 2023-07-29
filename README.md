@@ -1,5 +1,5 @@
 <div align="center">
-    <img src="./static/centzz-icon.png" width="200" height="200" style="border-radius:25px">
+    <img src="./static/centzz-icon-512.png" width="200" height="200">
 	<h1>💸 centzz</h1>
 	<p>
 		<b>Your dead-simple personal finances app</b>
