@@ -12,6 +12,8 @@ This is a simple app to manage your personal finances.
 
 You can have multiple accounts, add transactions manually or with a CSV file, and use 💸 **centzz**'s powerful rule engine to automatically categorize your transactions.
 
+Try it out [here](https://centzz.streamlit.app/)
+
 ## Features
 
 - Unlimited accounts
