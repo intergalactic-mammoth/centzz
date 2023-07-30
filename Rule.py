@@ -21,9 +21,9 @@ class RuleRelation(enum.StrEnum):
 class RuleAction(enum.StrEnum):
     """The action to take when a rule applies."""
 
+    CATEGORIZE = "categorize as"
     TRANSFER_TO = "transfer to"
     TRANSFER_FROM = "transfer from"
-    CATEGORIZE = "categorize"
 
 
 @attr.s(auto_attribs=True, frozen=True)
@@ -38,6 +38,10 @@ class RuleCondition:
     relation: RuleRelation
     values: list
 
+    def __str__(self) -> str:
+        """Returns a string representation of a RuleCondition."""
+        return f"{self.field} {self.relation.value} [{', '.join(self.values)}]"
+
 
 @attr.s(auto_attribs=True, frozen=True)
 class Rule:
@@ -50,6 +54,15 @@ class Rule:
     category: str
     operator: RuleOperator = RuleOperator.ALL
     logger: logging.Logger = logging.getLogger(__name__)
+
+    def __str__(self) -> str:
+        """Returns a string representation of a Rule."""
+        # TODO: Add operator when supported
+        return (
+            f"Rule: IF "
+            f"{', '.join(str(condition) for condition in self.conditions)} "
+            f"THEN {self.action.value} {self.category}"
+        )
 
     def as_dict(self) -> dict:
         """Returns a dictionary representation of a Rule."""

@@ -38,7 +38,7 @@ class ExpenseTrackerApp:
 
     def __init__(self, config_path: str):
         self.logger = logging.getLogger(__name__)
-
+        self.logger.info("============ Initializing ExpenseTrackerApp ============")
         try:
             with open(config_path, "r") as f:
                 self.app_config = json.load(f)
@@ -177,25 +177,8 @@ class ExpenseTrackerApp:
                 type="json",
                 key="load_data",
             )
-            if st.button("Load data 🚀") and data_file:
-                try:
-                    data = json.loads(data_file.read().decode("utf-8"))
-                except FileNotFoundError as e:
-                    raise FileNotFoundError(
-                        f"Error while loading JSON data: {e}"
-                    ) from e
-                try:
-                    self.expense_tracker.extend(ExpenseTracker.from_dict(data))
-                except KeyError as e:
-                    raise KeyError(
-                        f"Error while updating ExpenseTracker data: {e}"
-                    ) from e
-                self.logger.info("Loaded ExpenseTracker from JSON file.")
-                self.expense_tracker.log_state()
-                self.save()
-                st.success(
-                    "Data loaded successfully! Go to the other tabs and have fun."
-                )
+            if st.button("Load data 🚀", disabled=(data_file is None)) and data_file:
+                self._load_app_data_from_json(data_file)
         with st.expander("Save data"):
             st.caption(
                 "Export your data as a JSON file, to load it again next time you use the app.",
@@ -219,6 +202,21 @@ class ExpenseTrackerApp:
             "\n\nIf you want to support the development of this app, "
             "you can [buy me a coffee ☕️](#TODO) or support me on [Patreon](#TODO)."
         )
+
+    def _load_app_data_from_json(self, data_file) -> None:
+        """Loads app data from uploaded file to ExpenseTracker."""
+        try:
+            result = json.loads(data_file.read().decode("utf-8"))
+        except FileNotFoundError as e:
+            raise FileNotFoundError(f"Error while loading JSON data: {e}") from e
+        try:
+            self.expense_tracker.extend(ExpenseTracker.from_dict(result))
+        except KeyError as e:
+            raise KeyError(f"Error while updating ExpenseTracker data: {e}") from e
+        self.logger.info("Loaded ExpenseTracker from JSON file.")
+        self.expense_tracker.log_state()
+        self.save()
+        st.success("Data loaded successfully! Go to the other tabs and have fun.")
 
     def display_overview_tab(self):
         st.metric(
@@ -500,30 +498,46 @@ class ExpenseTrackerApp:
         if not self.expense_tracker.rules:
             st.write("No rules yet...")
         else:
-            df = pd.DataFrame([rule.as_dict() for rule in self.expense_tracker.rules])
-            df["conditions"] = df["conditions"].apply(
-                lambda conditions: ", ".join(
-                    [
-                        f"{condition['field']} {condition['relation']} {condition['values']}"
-                        for condition in conditions
-                    ]
-                )
+            # Assert there is only one condition. TODO: Remove this when multiple conditions are supported.
+            assert all(len(rule.conditions) == 1 for rule in self.expense_tracker.rules)
+
+            # Add rules to DF but decompose condition (there is only 1 in each list)
+            df = pd.DataFrame(
+                [
+                    {
+                        "field": rule.conditions[0].field,
+                        "relation": rule.conditions[0].relation,
+                        "values": rule.conditions[0].values,
+                        "action": rule.action,
+                        "category": rule.category,
+                    }
+                    for rule in self.expense_tracker.rules
+                ]
             )
+
             st.dataframe(
                 df,
                 hide_index=True,
                 column_config={
-                    "conditions": st.column_config.TextColumn(label="Conditions"),
-                    "action": st.column_config.TextColumn(label="Action"),
+                    "field": st.column_config.SelectboxColumn(
+                        label="Field", options=Transaction.data_model().keys()
+                    ),
+                    "relation": st.column_config.SelectboxColumn(
+                        label="Relation", options=list(RuleRelation)
+                    ),
+                    "values": st.column_config.ListColumn(label="Values"),
+                    "action": st.column_config.SelectboxColumn(
+                        label="Action", options=list(RuleAction)
+                    ),
                     "category": st.column_config.TextColumn(label="Category"),
+                    "operator": None,  # hide operator since it's not functional yet. TODO
                 },
             )
 
-        with st.expander("Add new rule"):
-            # TODO: Update to use ExpenseTracker
-            self.display_add_new_rule()
+        with st.expander("Add/Edit rule"):
+            self.display_add_or_edit_rule()
+
         with st.expander("Delete rule"):
-            # TODO: Update to use ExpenseTracker
             self.display_delete_rule()
 
     # -----------------------------
@@ -672,65 +686,132 @@ class ExpenseTrackerApp:
             st.success("All transactions deleted.")
             self.save_and_reload()
 
-    def display_add_new_rule(self):
+    def display_add_or_edit_rule(self):
+        def get_index(l: list, item: object) -> int:
+            """Returns index of item in list, or 0 if not found."""
+            try:
+                return l.index(item)
+            except ValueError:
+                return 0
+
         transactions = self.expense_tracker.transactions
         if not transactions:
             st.write("No transactions yet... Please add transactions first.")
             return
 
+        rules = self.expense_tracker.rules
+        edit_rule = st.checkbox("Edit existing rule?") if rules else False
+        if edit_rule:
+            rule_to_edit = st.selectbox(
+                "Rule to edit",
+                rules,
+                format_func=lambda rule: rule.__str__(),
+                help="Editing a rule will delete the old rule and create a new one!",
+            )
+
         # TODO: I need to find a way to add support for RuleOperator (AND, OR, NOT)
 
         left, middle, right = st.columns([1, 1, 2])
+        transaction_headers = list(Transaction.data_model().keys())
         target = left.selectbox(
-            "Target", list(Transaction.data_model().keys()), key="rule_target_selectbox"
+            "Target",
+            transaction_headers,
+            key="rule_target_selectbox",
+            index=get_index(
+                transaction_headers,
+                rule_to_edit.conditions[0].field if edit_rule else None,
+            ),
         )
+        rule_relations = list(RuleRelation)
         relation = middle.selectbox(
-            "Relation", list(RuleRelation), key="rule_relation_selectbox"
+            "Relation",
+            rule_relations,
+            key="rule_relation_selectbox",
+            index=get_index(
+                rule_relations,
+                rule_to_edit.conditions[0].relation if edit_rule else None,
+            ),
         )
         if relation == RuleRelation.EQUALS:
+            entries_for_target = self.expense_tracker.get_entries_for_transaction_field(
+                target
+            )
             rule_value = right.selectbox(
                 "Value",
-                options=self.expense_tracker.get_entries_for_transaction_field(target),
+                options=entries_for_target,
                 key="rule_value_selectbox",
+                help="The rule will match if `target` is exactly equal to the specified value.",
+                index=get_index(
+                    entries_for_target,
+                    rule_to_edit.conditions[0].values[0] if edit_rule else None,
+                ),
             )
             rule_value = [rule_value]
         elif relation == RuleRelation.CONTAINS:
-            rule_value = right.text_input("Value", key="rule_value_text_input")
-            rule_value = [rule_value]
+            rule_value = right.text_input(
+                "Value",
+                key="rule_value_text_input",
+                placeholder="Comma-separated list (e.g. 'foo,bar,bob')",
+                help="The rule will match if `target` contains any of the specified values. Don't use space after commas.",
+                value=", ".join(rule_to_edit.conditions[0].values) if edit_rule else "",
+            )
+            rule_value = [rule_value]  # TODO: Split comma-separated list
         elif relation == RuleRelation.ONE_OF:
+            entries_for_target = self.expense_tracker.get_entries_for_transaction_field(
+                target
+            )
             rule_value = right.multiselect(
                 "Values",
-                options=self.expense_tracker.get_entries_for_transaction_field(target),
+                options=entries_for_target,
                 key="rule_value_multiselect",
+                placeholder="Choose one or more values",
+                help="The rule will match if `target` is equal to any of the specified values.",
             )
         else:
             st.write("RuleRelation not implemented.")
 
         left, right = st.columns([1, 1])
-        action = left.selectbox("Action", list(RuleAction))
+        rule_actions = list(RuleAction)
+        action = left.selectbox(
+            "Action",
+            rule_actions,
+            help="What to do with the transaction if the rule matches.",
+            index=get_index(rule_actions, rule_to_edit.action if edit_rule else None),
+        )
         if action == RuleAction.CATEGORIZE:
-            category = right.text_input("Category", key="rule_category_text_input")
+            category = right.text_input(
+                "Category",
+                key="rule_category_text_input",
+                value=rule_to_edit.category if edit_rule else "",
+                placeholder="(e.g. 'Food', 'Rent', 'Salary')",
+            )
         else:
+            accounts = list(self.expense_tracker.accounts.keys())
             category = right.selectbox(
                 "Account",
-                options=self.expense_tracker.accounts.keys(),
+                options=accounts,
                 key="rule_category_selectbox",
+                index=get_index(accounts, rule_to_edit.category if edit_rule else None),
             )
 
-        st.markdown(
-            f"---\n\n**Resulting Rule:**\n\n`IF` *{target}* `{relation}` *{rule_value}* `THEN` *{action}* `=` *{category}*."
-        )
+        st.markdown("**Resulting rule:**")
+        st.markdown(f"`IF` *{target}* `{relation}`")
+        for value in rule_value:
+            st.write(f":blue[{value}]")
+        st.markdown(f"`THEN` *{action}* :blue[{category}]")
 
-        if st.button("Add rule"):
+        button_label = "Edit rule" if edit_rule else "Add rule"
+        if st.button(button_label):
             conditions = [RuleCondition(target, relation, rule_value)]
             rule = Rule(conditions, action, category)
             try:
+                if edit_rule:
+                    self.expense_tracker.delete_rule(rule_to_edit)
                 self.expense_tracker.add_rule(rule)
             except ValueError as e:
                 st.error(f"Error adding rule: {e}")
                 return
             self.expense_tracker.categorize_transactions()
-            st.success(f"Rule added: {rule}")
             self.save_and_reload()
 
     def display_delete_rule(self):
