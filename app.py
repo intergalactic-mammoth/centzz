@@ -721,6 +721,7 @@ class ExpenseTrackerApp:
                 transaction_headers,
                 rule_to_edit.conditions[0].field if edit_rule else None,
             ),
+            help="The transaction field to match against. `payee` or `description` are the most common to use here.",
         )
         rule_relations = list(RuleRelation)
         relation = middle.selectbox(
@@ -731,6 +732,14 @@ class ExpenseTrackerApp:
                 rule_relations,
                 rule_to_edit.conditions[0].relation if edit_rule else None,
             ),
+            help="""
+            `contains` will match if the target contains any of the specified values.
+            For example, if the target is `payee`, and the value is `foo`,
+            the rule will match if the payee is `foo`, `foobar`, or `barfoo`.
+
+            `equals` will match if the target is exactly equal to the specified value.
+
+            `one of` will match if the target is equal to any of the specified values.""",
         )
         if relation == RuleRelation.EQUALS:
             entries_for_target = self.expense_tracker.get_entries_for_transaction_field(
@@ -751,11 +760,15 @@ class ExpenseTrackerApp:
             rule_value = right.text_input(
                 "Value",
                 key="rule_value_text_input",
-                placeholder="Comma-separated list (e.g. 'foo,bar,bob')",
-                help="The rule will match if `target` contains any of the specified values. Don't use space after commas.",
+                placeholder="Comma-separated list (e.g. 'foo, bar, bob')",
+                help="""
+                    The rule will match if `target` contains any of the specified values.
+                    Separate values with a comma.
+
+                    The values are case-insensitive ('foo', 'Foo', and 'FOO' are all the same).""",
                 value=", ".join(rule_to_edit.conditions[0].values) if edit_rule else "",
             )
-            rule_value = [rule_value]  # TODO: Split comma-separated list
+            rule_value = [value.strip().lower() for value in rule_value.split(",")]
         elif relation == RuleRelation.ONE_OF:
             entries_for_target = self.expense_tracker.get_entries_for_transaction_field(
                 target

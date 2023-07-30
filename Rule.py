@@ -11,7 +11,12 @@ class RuleOperator(enum.StrEnum):
 
 
 class RuleRelation(enum.StrEnum):
-    """The relation to use when evaluating a condition of a rule."""
+    """The relation to use when evaluating a condition of a rule.
+
+    CONTAINS: The field contains one of the values. Case insensitive.
+    EQUALS: The field is equal to the value. Case sensitive.
+    ONE_OF: The field is one of the values. Case sensitive.
+    """
 
     CONTAINS = "contains"
     EQUALS = "is"

@@ -47,12 +47,16 @@ class Transaction:
         relation = condition.relation
         values = condition.values
 
-        if relation == RuleRelation.CONTAINS.value:
-            return any(value in getattr(self, field) for value in values)
-        if relation == RuleRelation.EQUALS.value:
+        if relation == RuleRelation.CONTAINS:
+            target = getattr(self, field)
+            # String matching is case-insensitive.
+            if isinstance(target, str):
+                target = target.lower()
+            return any(value in target for value in values)
+        if relation == RuleRelation.EQUALS:
             assert len(values) == 1
             return getattr(self, field) == values[0]
-        if relation == RuleRelation.ONE_OF.value:
+        if relation == RuleRelation.ONE_OF:
             return getattr(self, field) in values
         raise ValueError(f"Unknown relation {relation}")
 
@@ -62,6 +66,7 @@ class Transaction:
 
     # TODO: I need to figure out a deterministic way of applying
     # rule precedence, and how to handle rule collisions.
+    # Most specific rules should take precedence.
     def categorize(self, rules: list[Rule]) -> None:
         """Categorizes the transaction by applying the given rules."""
         matched = False
