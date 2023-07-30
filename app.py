@@ -575,9 +575,25 @@ class ExpenseTrackerApp:
         """Displays a form to add a new account to ExpenseTracker."""
 
         with st.expander("Add new account"):
-            account_name = st.text_input("Account name")
+            account_name = st.text_input(
+                "Account name", help="Unique name to identify the account."
+            )
             account_currency = st.selectbox("Currency", ["CHF", "EUR", "USD"])
-            account_initial_balance = st.number_input("Initial balance")
+            account_initial_balance = st.number_input(
+                "Initial balance",
+                help="""
+                    Initial balance of the account.
+                    e.g. If you are uploading transactions from the
+                    last 3 months, set to the amount of money you had in the account
+                    before the first transaction that appears in the CSV file.
+
+                    If you are adding transactions manually, set to the amount of money
+                    you have in the account right now.
+
+                    If you are uploading a CSV with the full history of transactions,
+                    leave at 0.
+                    """,
+            )
 
             account = Account.from_dict(
                 {
