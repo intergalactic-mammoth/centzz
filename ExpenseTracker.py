@@ -1,10 +1,17 @@
+"""ExpenseTracker class. See class docstring for more information."""
 import attr
 import logging
 import json
 
 import pandas as pd
 
-from analytics_utils import GroupingPeriod, GroupBy, GROUPING_PERIOD_TO_PANDAS
+from analytics_utils import (
+    GroupingPeriod,
+    GroupBy,
+    TransactionType,
+    GROUPING_PERIOD_TO_PANDAS,
+    filter_list_transactions_by_type,
+)
 from Account import Account
 from Currency import Currency, CurrencyConverter
 from Rule import Rule
@@ -106,25 +113,29 @@ class ExpenseTracker:
             for transaction in self.accounts[account_name].transactions.values()
         ]
 
-    def get_grouped_expenses(
+    def get_grouped_transactions(
         self,
+        transaction_type: TransactionType,
         group_by: GroupBy = GroupBy.NONE,
-        period: GroupingPeriod = GroupingPeriod.NONE,
+        period: GroupingPeriod = GroupingPeriod.DAY,
         accounts: list[str] = None,
     ) -> pd.DataFrame:
-        """Returns a DataFrame with the expenses grouped by the given categorization method and period.
+        """Returns a DataFrame with transactions of type TransactionType,
+        grouped by the given categorization method and period.
 
         DataFrame columns contain only a subset of the Transaction fields:
         - date
-        - amount
+        - credit
+        - debit
         - category
         - account
 
         IMPORTANT ⚠️
-        - Amount in expenses is normalized to the default currency.
-        - Excludes expenses categorized as "Transfer".
+        - Amount in transaction is normalized to the default currency.
+        - Contains only transactions of type TransactionType. (e.g. only expenses)
         """
         time_offset = GROUPING_PERIOD_TO_PANDAS[period]
+        self.logger.debug("Getting transactions for %s", accounts)
         transactions = (
             self.get_transactions_in_accounts(accounts)
             if accounts
@@ -133,13 +144,19 @@ class ExpenseTracker:
         group_cols = [pd.Grouper(key="date", freq=time_offset)]
         if group_by != GroupBy.NONE:
             group_cols.append(group_by.value.lower())
+        transactions = filter_list_transactions_by_type(transactions, transaction_type)
         return (
             pd.DataFrame(
                 [
                     {
                         "date": pd.to_datetime(transaction.date),
-                        "amount": CurrencyConverter.convert(
+                        "debit": CurrencyConverter.convert(
                             transaction.debit,
+                            transaction.currency,
+                            self.config.default_currency,
+                        ),
+                        "credit": CurrencyConverter.convert(
+                            transaction.credit,
                             transaction.currency,
                             self.config.default_currency,
                         ),
@@ -147,7 +164,6 @@ class ExpenseTracker:
                         "account": transaction.account,
                     }
                     for transaction in transactions
-                    if transaction.debit > 0 and transaction.category != "Transfer"
                 ]
             )
             .groupby(group_cols)

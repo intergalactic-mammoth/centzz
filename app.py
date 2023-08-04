@@ -9,7 +9,16 @@ import streamlit as st
 
 import plotting
 
-from analytics_utils import GroupingPeriod, GroupBy, filter_transactions_by_dates
+from analytics_utils import (
+    ChartType,
+    GroupingPeriod,
+    GroupBy,
+    FinancialMetric,
+    TransactionType,
+    GROUPING_PERIOD_TO_ALTAIR_TIMEUNIT,
+    FINANCIAL_METRIC_TO_TRANSACTION_FIELD,
+    filter_df_transactions_by_dates,
+)
 
 from Account import Account
 from Currency import Currency
@@ -120,21 +129,21 @@ class ExpenseTrackerApp:
 
     def display_start_tab(self):
         st.header("Welcome to 💸 **centzz!**")
-        st.write("Read the instructions below to get started.")
-        with st.expander("Read me ⚠️"):
+        with st.expander("Quickstart"):
             st.markdown(
                 """
-                #### 1. Add accounts
-                First, you need to add your accounts.
+                #### 1. Add an account 🏦
+                Go to the Accounts tab, and add an account.
                 You can add as many accounts as you want.
 
-                #### 2. Add transactions
-                Once you have added your accounts,
-                you can add transactions to them.
-                You can add transactions manually,
+                #### 2. Add transactions 📖
+                Once you have added an account,
+                you can add transactions to it from the Transactions tab.
+                You can add transactions manually (don't),
                 or import them from a CSV file.
 
                 How to get your transactions as a CSV file depends on your bank.
+                A quick Google search should help you find out how to do it.
                 Here are pointers for some banks to get you started:
 
                 - [UBS](https://help.revolut.com/en-US/help/profile-and-plan/managing-my-account/viewing-my-account-statements/)
@@ -142,24 +151,29 @@ class ExpenseTrackerApp:
                 - [N26](https://support.n26.com/en-eu/payments-transfers-and-withdrawals/balance-and-limits/how-to-get-bank-statement-n26)
                 - [Revolut](#TODO)
 
-                #### 3. Add rules
+                #### 3. Add rules 🧮
                 Once you have added transactions,
                 you can add rules to categorize them.
+                That's where things start to get interesting.
                 💸 **centzz** provides you with a powerful rule engine
                 to categorize your transactions automatically.
 
-                #### 4. Enjoy the analytics
+                #### 4. Enjoy the analytics 📈
                 Once you have added transactions and rules,
                 you can enjoy the analytics.
                 💸 **centzz** has an intuitive analytics engine
                 to visualize your finances.
 
-                #### 5. Save your data
+                #### 5. Save your data 💾
                 💸 **centzz** is a browser app, which means that all
                 your data is stored in your browser.
-                This means that if you close the tab,
-                or if you don't use the app for a while,
+                While this is great for privacy and security,
+                it means that if you close the tab, reload the page,
+                or if you don't use the app for some time,
                 all your data will be lost.
+
+                So, every time you're done using the app, make sure to
+                save your data by clicking on the "Save data" section.
 
                 To save your data, you can download it as a JSON file.
                 You can then load this file again to continue working on your data.
@@ -171,13 +185,16 @@ class ExpenseTrackerApp:
                 "is a browser app, **all data will be lost** if you close or reload the tab.",
                 icon="⚠️",
             )
-        with st.expander("Load data"):
+        with st.expander("Load data "):
             data_file = st.file_uploader(
                 label="If you have previously exported your data, you can load it here:",
                 type="json",
                 key="load_data",
             )
-            if st.button("Load data 🚀", disabled=(data_file is None)) and data_file:
+            if (
+                st.button("Load data 🚀", disabled=(data_file is None), type="primary")
+                and data_file
+            ):
                 self._load_app_data_from_json(data_file)
         with st.expander("Save data"):
             st.caption(
@@ -230,18 +247,20 @@ class ExpenseTrackerApp:
         # Expenses this month
         st.header("Expenses this month")
         if transactions := self.expense_tracker.transactions:
-            df = self.expense_tracker.get_grouped_expenses(
-                group_by=GroupBy.CATEGORY, period=GroupingPeriod.MONTH
+            df = self.expense_tracker.get_grouped_transactions(
+                transaction_type=TransactionType.EXPENSE,
+                group_by=GroupBy.CATEGORY,
+                period=GroupingPeriod.MONTH,
             )
             # start_date: first day of current month
             # end_date: current date
             today = pd.Timestamp.today()
             start_date = pd.Timestamp(today.year, today.month, 1)
-            df = filter_transactions_by_dates(df, start_date, today)
+            df = filter_df_transactions_by_dates(df, start_date, today)
             if not df.empty:
                 st.dataframe(df)
             else:
-                st.write("No expenses recorded yet...")
+                st.write("No expenses yet...")
 
         else:
             st.write("No data yet...")
@@ -254,82 +273,82 @@ class ExpenseTrackerApp:
         self.display_delete_account()
 
     def display_analytics_tab(self):
-        # TODO: Make analytics modular to reuse also in overview tab
-        # TODO: Add donut chart (with Altair) :)
         st.header("📈 Analytics")
         if not self.expense_tracker.accounts:
             st.write("No accounts found... Please add an account first.")
 
-        if transactions := self.expense_tracker.transactions:
+        transactions = self.expense_tracker.transactions
+
+        if not transactions:
+            st.write("No transactions found... Please add transactions first.")
+            return
+
+        active_account_col, plot_type_col = st.columns(2)
+        all_accounts = list(self.expense_tracker.accounts.keys())
+        with active_account_col:
             selected_accounts = st.multiselect(
                 "Active accounts",
-                self.expense_tracker.accounts.keys(),
-                default=self.expense_tracker.accounts.keys(),
+                all_accounts,
+                default=all_accounts,
             )
-            col1, col2 = st.columns(2)
-            aggregation_period = col1.selectbox("Group by", list(GroupingPeriod))
-            aggregate_by = col2.selectbox("and", list(GroupBy))
-
-            df = pd.DataFrame([transaction.as_dict() for transaction in transactions])
-            df["date"] = pd.to_datetime(df["date"])
-
-            min_date = df["date"].min().date()
-            max_date = df["date"].max().date()
-
-            col3, col4 = st.columns(2)
-            with col3:
-                start_date = st.date_input(
-                    "Start date", min_date, min_value=min_date, max_value=max_date
-                )
-            with col4:
-                end_date = st.date_input(
-                    "End date", max_date, min_value=min_date, max_value=max_date
-                )
-
-            if start_date > end_date:
-                st.error("End date must fall after start date.")
-                return
-
-            # Filter to keep only transactions between start and end date
-            df = filter_transactions_by_dates(df, start_date, end_date)
-            # Filter to keep only selected accounts
-            df = df[df["account"].isin(selected_accounts)]
-
-            # Running balance for line plot over time. amount = credit - debit
-            # TODO: Need to adjust with starting balance for each account
-            running_balance_df = pd.DataFrame(
-                {
-                    "date": df["date"],
-                    "amount": df["credit"] - df["debit"],
-                }
+        with plot_type_col:
+            plot_type = st.selectbox(
+                "Plot type",
+                list(ChartType),
             )
-            running_balance_df = running_balance_df.sort_values("date")
-            running_balance_df["balance"] = running_balance_df["amount"].cumsum()
+        col0, col1, col2 = st.columns(3)
+        with col0:
+            transaction_field = st.selectbox("Show", list(FinancialMetric))
+        with col1:
+            grouping_period = st.selectbox("grouped by", list(GroupingPeriod))
+        with col2:
+            group_by = st.selectbox("and", list(GroupBy))
 
-            expenses_df = self.expense_tracker.get_grouped_expenses(
-                group_by=aggregate_by,
-                period=aggregation_period,
-                accounts=selected_accounts,
-            )
-            expenses_df = (
-                filter_transactions_by_dates(expenses_df, start_date, end_date)
-                .sort_values("date")
-                .pivot_table(
-                    index="date",
-                    columns=aggregate_by.lower()
-                    if aggregate_by != GroupBy.NONE
-                    else None,
-                    values="amount",
-                    fill_value=0,
-                )
-            )
-            plotting.create_line_chart(
-                running_balance_df, "date", "balance", "Running Balance Over Time"
-            )
-            plotting.create_bar_chart(expenses_df, "Expenses Over Time")
+        df = pd.DataFrame(transaction.as_dict() for transaction in transactions)
+        # Make date column a datetime object
+        df["date"] = pd.to_datetime(df["date"])
+        # Fill all numerical nans with 0
+        df["credit"] = pd.to_numeric(df["credit"], errors="coerce").fillna(0)
+        df["debit"] = pd.to_numeric(df["debit"], errors="coerce").fillna(0)
 
-        else:
-            st.write("No transactions found... Please add transactions first.")
+        # Get the min and max dates possible for the date range selector
+        min_date = df["date"].min().date()
+        max_date = df["date"].max().date()
+        col3, col4 = st.columns(2)
+        with col3:
+            start_date = st.date_input(
+                "Start date", min_date, min_value=min_date, max_value=max_date
+            )
+        with col4:
+            end_date = st.date_input(
+                "End date", max_date, min_value=min_date, max_value=max_date
+            )
+        if start_date > end_date:
+            st.error("End date must fall after start date.")
+            return
+        # Rename column "debit" to "expense" and credit to "income"
+        # df = df.rename(columns={"debit": "expense", "credit": "income"})
+        df["balance"] = df["credit"] - df["debit"]
+        # Filter to keep only transactions between start and end date
+        df = filter_df_transactions_by_dates(df, start_date, end_date)
+        # Filter to keep only transactions from selected accounts
+        df = df[df["account"].isin(selected_accounts)]
+
+        transaction_field = FINANCIAL_METRIC_TO_TRANSACTION_FIELD[transaction_field]
+        cumulative = False
+        if "cumulative" in transaction_field:
+            cumulative = True
+            transaction_field = transaction_field.replace("cumulative_", "")
+
+        chart = plotting.get_chart_data(
+            df,
+            transaction_field=transaction_field,
+            group_by=group_by.lower(),
+            timeunit=GROUPING_PERIOD_TO_ALTAIR_TIMEUNIT[grouping_period],
+            cumulative=cumulative,
+            chart_type=plot_type.value.lower(),
+        )
+        st.altair_chart(chart, use_container_width=True)
 
     def display_transactions_tab(self):
         st.header("📖 Transactions")
@@ -359,9 +378,8 @@ class ExpenseTrackerApp:
             description = st.text_input("Description")
             debit_or_credit = st.selectbox("Debit/Credit", ["Debit", "Credit"])
             amount = st.number_input("Amount")
-            category = st.text_input("Category")
 
-            if st.button("Add transaction"):
+            if st.button("Add transaction", type="primary"):
                 transaction = Transaction(
                     transaction_id=str(uuid.uuid4()),
                     date=date.isoformat(),
@@ -371,9 +389,9 @@ class ExpenseTrackerApp:
                     credit=amount if debit_or_credit == "Credit" else 0.0,
                     account=account,
                     currency=Currency(currency),
-                    category=category,
                 )
                 try:
+                    transaction.categorize(self.expense_tracker.rules)
                     self.expense_tracker.accounts[account].add_transaction(transaction)
                 except ValueError as e:
                     st.error(f"Error adding transaction: {e}")
@@ -436,7 +454,7 @@ class ExpenseTrackerApp:
                     st.error("All headers must be set.")
                     return
 
-                add_transactions = st.button("Add transactions")
+                add_transactions = st.button("Add transactions", type="primary")
                 if add_transactions and account_selection:
                     try:
                         new_transactions = [
@@ -606,7 +624,7 @@ class ExpenseTrackerApp:
             if not account.is_valid():
                 st.error("Account name must be filled in.")
 
-            if st.button("Create account"):
+            if st.button("Create account", type="primary"):
                 try:
                     self.expense_tracker.add_account(account)
                     st.success(f"Account {account.name} created.")
@@ -632,7 +650,11 @@ class ExpenseTrackerApp:
             account_to_delete = st.selectbox(
                 "Account to delete", self.expense_tracker.accounts.keys()
             )
-            if st.button("Delete account"):
+            if st.button(
+                "Delete account",
+                disabled=(account_to_delete is None),
+                type="primary",
+            ):
                 del self.expense_tracker.accounts[account_to_delete]
                 st.success(f"Account {account_to_delete} deleted.")
                 self.save_and_reload()
@@ -830,7 +852,7 @@ class ExpenseTrackerApp:
         st.markdown(f"`THEN` *{action}* :blue[{category}]")
 
         button_label = "Edit rule" if edit_rule else "Add rule"
-        if st.button(button_label):
+        if st.button(button_label, type="primary"):
             conditions = [RuleCondition(target, relation, rule_value)]
             rule = Rule(conditions, action, category)
             try:
