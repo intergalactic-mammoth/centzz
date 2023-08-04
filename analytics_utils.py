@@ -9,6 +9,7 @@ class FinancialMetric(enum.StrEnum):
     """Financial metrics that can be plotted."""
 
     BALANCE = "Balance"
+    CASH_FLOW = "Cash Flow"
     INCOME = "Income"
     EXPENSE = "Expense"
     CUMULATIVE_INCOME = "Cumulative Income"
@@ -68,7 +69,8 @@ GROUPING_PERIOD_TO_ALTAIR_TIMEUNIT = {
 }
 
 FINANCIAL_METRIC_TO_TRANSACTION_FIELD = {
-    FinancialMetric.BALANCE: "balance",
+    FinancialMetric.CASH_FLOW: "balance",
+    FinancialMetric.BALANCE: "cumulative_balance",
     FinancialMetric.INCOME: "credit",
     FinancialMetric.EXPENSE: "debit",
     FinancialMetric.CUMULATIVE_INCOME: "cumulative_credit",
