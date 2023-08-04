@@ -502,13 +502,15 @@ class ExpenseTrackerApp:
                             f"Error reading CSV file: {e}.\nDetailed error:\n{traceback.format_exc()}"
                         )
 
+        with st.expander("Delete transactions"):
+            self.display_delete_transactions()
+
         st.caption("All transactions")
         current_transactions = self.expense_tracker.transactions
         if not current_transactions:
             st.write("No transactions yet...")
         else:
             self.display_transactions()
-            self.display_delete_all_transactions()
 
     def display_rules_tab(self):
         st.header("🧮 Rules")
@@ -711,17 +713,25 @@ class ExpenseTrackerApp:
             use_container_width=True,
         )
 
-    def display_delete_all_transactions(self):
-        col1, col2 = st.columns([2, 1])
-        delete_all = col1.checkbox("Delete all transactions")
-        if delete_all:
+    def display_delete_transactions(self) -> None:
+        """Displays a form to delete transactions from ExpenseTracker.
+
+        Deletes transactions from selected accounts."""
+        accounts_to_delete = st.multiselect(
+            "Select accounts", self.expense_tracker.accounts.keys()
+        )
+        confirm_delete = st.checkbox(
+            "Delete transactions", disabled=not accounts_to_delete
+        )
+        if confirm_delete:
             st.warning(
-                "This will delete all transactions. Action cannot be undone.", icon="⚠️"
+                "This will delete all transactions in the selected account(s). Action cannot be undone.",
+                icon="⚠️",
             )
-        if col2.button("Delete", disabled=not delete_all):
-            for account in self.expense_tracker.accounts.values():
-                account.transactions = {}
-            st.success("All transactions deleted.")
+        if st.button("Delete", disabled=(not confirm_delete or not accounts_to_delete)):
+            for account in accounts_to_delete:
+                self.expense_tracker.accounts[account].transactions = {}
+            st.success(f"Transactions deleted for {accounts_to_delete}.")
             self.save_and_reload()
 
     def display_add_or_edit_rule(self):
