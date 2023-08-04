@@ -103,10 +103,10 @@ class ExpenseTrackerApp:
             overview_tab,
             accounts_tab,
             transactions_tab,
-            analytics_tab,
             rules_tab,
+            analytics_tab,
         ) = st.tabs(
-            ["Start", "Overview", "Accounts", "Transactions", "Analytics", "Rules"]
+            ["Start", "Overview", "Accounts", "Transactions", "Rules", "Analytics"]
         )
 
         with start_tab:
