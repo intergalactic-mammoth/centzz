@@ -6,7 +6,11 @@ from Transaction import Transaction
 
 
 class FinancialMetric(enum.StrEnum):
-    """Financial metrics that can be plotted."""
+    """Financial metrics that can be plotted.
+
+    Income and Expense are used instead of Credit and Debit,
+    since the latter are not very intuitive for users, despite
+    being more the bank industry terms."""
 
     BALANCE = "Balance"
     CASH_FLOW = "Cash Flow"
